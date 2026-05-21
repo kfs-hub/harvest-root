@@ -1,0 +1,21 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Production build artefacts (if you ever add a build step)
+dist/
+build/
+
+# Runtime / environment files
+.env
+database.sqlite
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE / editor folders
+.vscode/
+.idea/
