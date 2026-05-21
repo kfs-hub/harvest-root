@@ -1,195 +1,437 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Harvest Root — Admin Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
     <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0f1117;
+            --bg-secondary: #1a1d27;
+            --bg-card: #1e2130;
+            --bg-card-hover: #252839;
+            --border-color: rgba(255,255,255,0.06);
+            --border-accent: rgba(255,255,255,0.1);
+            --text-primary: #f0f0f5;
+            --text-secondary: #9ca3b4;
+            --text-muted: #6b7280;
+            --accent-green: #4ade80;
+            --accent-green-dim: rgba(74,222,128,0.12);
+            --accent-amber: #fbbf24;
+            --accent-amber-dim: rgba(251,191,36,0.12);
+            --accent-red: #f87171;
+            --accent-red-dim: rgba(248,113,113,0.12);
+            --accent-blue: #60a5fa;
+            --accent-blue-dim: rgba(96,165,250,0.12);
+            --accent-emerald: #34d399;
+            --gradient-brand: linear-gradient(135deg, #4ade80 0%, #22d3ee 100%);
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.4);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f4f7f6;
-            margin: 0;
-            padding: 0;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
         }
 
-        .admin-header {
-            background-color: #2c3e2f;
-            color: white;
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            position: fixed; top: 0; left: 0;
+            width: 260px; height: 100vh;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex; flex-direction: column;
+            z-index: 100;
+            transition: transform 0.3s ease;
+        }
+        .sidebar-brand {
+            padding: 1.5rem 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center; gap: 12px;
+        }
+        .sidebar-brand img { width: 42px; height: 42px; border-radius: 10px; }
+        .sidebar-brand h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.2rem; font-weight: 700;
+            background: var(--gradient-brand);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .sidebar-brand span {
+            font-size: 0.7rem; color: var(--text-muted);
+            display: block; margin-top: 2px;
+            -webkit-text-fill-color: var(--text-muted);
+        }
+        .sidebar-nav { padding: 1rem 0.75rem; flex: 1; }
+        .nav-label {
+            font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px;
+            color: var(--text-muted); padding: 0.75rem 0.75rem 0.5rem; font-weight: 600;
+        }
+        .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 0.7rem 0.75rem; border-radius: var(--radius-sm);
+            color: var(--text-secondary); cursor: pointer;
+            transition: all 0.2s ease; font-size: 0.9rem; font-weight: 500;
+            border: none; background: none; width: 100%; text-align: left;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+        .nav-item.active {
+            background: var(--accent-green-dim); color: var(--accent-green);
+        }
+        .nav-item svg { width: 20px; height: 20px; flex-shrink: 0; }
+        .nav-item .nav-badge {
+            margin-left: auto; background: var(--accent-green);
+            color: var(--bg-primary); font-size: 0.7rem; font-weight: 700;
+            padding: 2px 8px; border-radius: 10px;
+        }
+        .sidebar-footer {
+            padding: 1rem 1.25rem; border-top: 1px solid var(--border-color);
+        }
+        .sidebar-footer a {
+            display: flex; align-items: center; gap: 8px;
+            color: var(--text-secondary); text-decoration: none;
+            font-size: 0.85rem; font-weight: 500;
+            padding: 0.5rem 0.5rem; border-radius: var(--radius-sm);
+            transition: all 0.2s;
+        }
+        .sidebar-footer a:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
+
+        /* ===== MAIN ===== */
+        .main { margin-left: 260px; min-height: 100vh; }
+
+        /* ===== TOP BAR ===== */
+        .topbar {
+            position: sticky; top: 0; z-index: 50;
+            background: rgba(15,17,23,0.85); backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-color);
             padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .topbar-title { font-size: 1.3rem; font-weight: 700; }
+        .topbar-actions { display: flex; align-items: center; gap: 12px; }
+        .btn-refresh {
+            display: flex; align-items: center; gap: 6px;
+            background: rgba(255,255,255,0.06); border: 1px solid var(--border-accent);
+            color: var(--text-secondary); padding: 0.5rem 1rem;
+            border-radius: var(--radius-sm); cursor: pointer;
+            font-size: 0.85rem; font-weight: 500; transition: all 0.2s;
+        }
+        .btn-refresh:hover { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+        .btn-refresh.spinning svg { animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .mobile-toggle {
+            display: none; background: none; border: none;
+            color: var(--text-primary); cursor: pointer; padding: 0.5rem;
         }
 
-        .admin-header h2 {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin: 0;
-            font-size: 1.8rem;
-            font-weight: 600;
+        /* ===== CONTENT ===== */
+        .content { padding: 1.5rem 2rem 3rem; }
+
+        /* ===== STAT CARDS ===== */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem; margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--radius-md); padding: 1.25rem 1.5rem;
+            transition: all 0.3s ease;
+        }
+        .stat-card:hover { border-color: var(--border-accent); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+        .stat-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+        .stat-icon {
+            width: 40px; height: 40px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
+        }
+        .stat-icon.green { background: var(--accent-green-dim); }
+        .stat-icon.amber { background: var(--accent-amber-dim); }
+        .stat-icon.blue { background: var(--accent-blue-dim); }
+        .stat-icon.red { background: var(--accent-red-dim); }
+        .stat-label { font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
+        .stat-value { font-size: 1.75rem; font-weight: 700; }
+        .stat-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+
+        /* ===== SECTION ===== */
+        .section-panel {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 1.5rem;
+        }
+        .section-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .section-header h2 { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .section-header h2 svg { color: var(--accent-green); }
+        .filter-group { display: flex; gap: 0.5rem; }
+        .filter-btn {
+            padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.78rem;
+            font-weight: 500; border: 1px solid var(--border-accent);
+            background: transparent; color: var(--text-secondary); cursor: pointer;
+            transition: all 0.2s;
+        }
+        .filter-btn:hover { background: rgba(255,255,255,0.05); }
+        .filter-btn.active { background: var(--accent-green-dim); color: var(--accent-green); border-color: rgba(74,222,128,0.3); }
+        .section-body { padding: 0; }
+
+        /* ===== TAB PANELS ===== */
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ===== ORDER CARDS ===== */
+        .orders-list { padding: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; }
+        .order-card {
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: var(--radius-md); overflow: hidden;
+            transition: all 0.25s ease;
+        }
+        .order-card:hover { border-color: var(--border-accent); box-shadow: var(--shadow-sm); }
+        .order-card-top {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1rem 1.25rem; gap: 1rem; flex-wrap: wrap;
+        }
+        .order-id {
+            font-weight: 700; font-size: 0.95rem;
+            color: var(--accent-green); min-width: 70px;
+        }
+        .order-date { font-size: 0.8rem; color: var(--text-muted); }
+        .order-total { font-size: 1.05rem; font-weight: 700; }
+        .order-status-select {
+            appearance: none; border: none; font-weight: 600; font-size: 0.78rem;
+            padding: 0.3rem 0.85rem; border-radius: 20px; cursor: pointer;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            font-family: 'Inter', sans-serif;
+        }
+        .order-status-select.pending { background: var(--accent-amber-dim); color: var(--accent-amber); }
+        .order-status-select.completed { background: var(--accent-green-dim); color: var(--accent-green); }
+        .order-status-select.cancelled { background: var(--accent-red-dim); color: var(--accent-red); }
+
+        .order-card-body {
+            display: grid; grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem; padding: 0 1.25rem 1.25rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 1rem;
+        }
+        .order-detail-block {}
+        .order-detail-label {
+            font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px;
+            color: var(--text-muted); font-weight: 600; margin-bottom: 0.4rem;
+        }
+        .order-detail-value { font-size: 0.88rem; color: var(--text-primary); line-height: 1.5; }
+        .order-detail-value a { color: var(--accent-blue); text-decoration: none; }
+        .order-detail-value a:hover { text-decoration: underline; }
+        .order-address {
+            font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;
+            background: rgba(255,255,255,0.02); padding: 0.6rem 0.8rem;
+            border-radius: var(--radius-sm); border-left: 3px solid var(--accent-green);
+        }
+        .order-item-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.3rem 0; font-size: 0.85rem;
+        }
+        .order-item-name { color: var(--text-primary); }
+        .order-item-qty { color: var(--text-muted); font-size: 0.8rem; }
+        .order-item-price { color: var(--accent-emerald); font-weight: 600; font-size: 0.85rem; }
+
+        /* ===== CONTACTS TABLE ===== */
+        .contacts-list { padding: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; }
+        .contact-card {
+            background: var(--bg-secondary); border: 1px solid var(--border-color);
+            border-radius: var(--radius-md); padding: 1.25rem;
+            transition: all 0.25s ease;
+        }
+        .contact-card:hover { border-color: var(--border-accent); }
+        .contact-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+        .contact-person { display: flex; align-items: center; gap: 10px; }
+        .contact-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: var(--accent-blue-dim); color: var(--accent-blue);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 0.85rem;
+        }
+        .contact-name { font-weight: 600; font-size: 0.95rem; }
+        .contact-email { font-size: 0.8rem; color: var(--accent-blue); }
+        .contact-date { font-size: 0.75rem; color: var(--text-muted); }
+        .contact-message {
+            font-size: 0.88rem; color: var(--text-secondary); line-height: 1.6;
+            background: rgba(255,255,255,0.02); padding: 0.75rem 1rem;
+            border-radius: var(--radius-sm); border-left: 3px solid var(--accent-blue);
         }
 
-        .admin-header a {
-            color: #fff;
-            text-decoration: none;
-            font-weight: 500;
-            border: 2px solid #fff;
-            padding: 0.4rem 0.8rem;
-            border-radius: 6px;
-            transition: background 0.3s, color 0.3s;
+        /* ===== EMPTY STATE ===== */
+        .empty-state {
+            text-align: center; padding: 3rem 1rem; color: var(--text-muted);
         }
-        .admin-header a:hover {
-            background: #fff;
-            color: #2c3e2f;
+        .empty-state svg { margin-bottom: 1rem; opacity: 0.3; }
+        .empty-state p { font-size: 0.95rem; }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 900px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+            .main { margin-left: 0; }
+            .mobile-toggle { display: block; }
+            .order-card-body { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 500px) {
+            .content { padding: 1rem; }
+            .topbar { padding: 0.75rem 1rem; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .order-card-top { flex-direction: column; align-items: flex-start; }
         }
 
-        .admin-container {
-            max-width: 1100px;
-            margin: 2rem auto;
-            padding: 0 1rem;
+        /* Overlay for mobile sidebar */
+        .sidebar-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5); z-index: 99;
         }
-
-        .tabs {
-            display: flex;
-            gap: 0.8rem;
-            margin-bottom: 1.5rem;
-        }
-        .tab-btn {
-            padding: 0.6rem 1.2rem;
-            border: none;
-            background: #e0e0e0;
-            cursor: pointer;
-            border-radius: 6px;
-            font-weight: 500;
-            transition: background 0.3s, color 0.3s;
-        }
-        .tab-btn.active {
-            background: #4a6741;
-            color: #fff;
-        }
-        .tab-btn:hover {
-            background: #c8c8c8;
-        }
-
-        .tab-content {
-            display: none;
-            background: #fff;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.07);
-        }
-        .tab-content.active { display: block; }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-            font-size: 0.95rem;
-        }
-        th, td {
-            text-align: left;
-            padding: 0.9rem;
-            border-bottom: 1px solid #eaeaea;
-        }
-        th {
-            background: #f9f9f9;
-            font-weight: 600;
-        }
-        tr:nth-child(even) { background: #fafafa; }
-        tr:hover { background: #f1f3f5; }
-
-        .badge {
-            padding: 0.25rem 0.6rem;
-            border-radius: 12px;
-            font-size: 0.85rem;
-            font-weight: 500;
-        }
-        .badge.pending { background: #fff3cd; color: #856404; }
-        .badge.completed { background: #d4edda; color: #155724; }
-        .badge.cancelled { background: #f8d7da; color: #842029; }
-
-        .order-items {
-            font-size: 0.88rem;
-            color: #555;
-            line-height: 1.4;
-        }
-
-        select.badge {
-            appearance: none;
-            background: transparent;
-            border: none;
-            font-weight: 500;
-            cursor: pointer;
-        }
-
-        @media (max-width: 768px) {
-            .admin-header h2 { font-size: 1.5rem; }
-            .admin-container { padding: 0 0.5rem; }
-            .tab-content { padding: 1.5rem; }
-            table, th, td { font-size: 0.85rem; }
-        }
+        .sidebar-overlay.open { display: block; }
     </style>
 </head>
-
 <body>
-    <header class="admin-header">
-        <h2><span class="logo-icon"> <img src="images/harvest root logo.png" alt="Company Logo" width="70"></span>
-            Harvest Root Admin</h2>
-        <a href="/" style="color: white; text-decoration: none;">View Site</a>
-    </header>
 
-    <div class="admin-container">
-        <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('orders')">Orders</button>
-            <button class="tab-btn" onclick="switchTab('contacts')">Messages</button>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <img src="images/harvest root logo.png" alt="Logo">
+            <div>
+                <h1>Harvest Root</h1>
+                <span>Admin Dashboard</span>
+            </div>
         </div>
-
-        <div id="orders-tab" class="tab-content active">
-            <h3>Recent Orders</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Order ID</th>
-                        <th>Date</th>
-                        <th>Customer</th>
-                        <th>Items</th>
-                        <th>Total</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody id="orders-tbody">
-                    <tr>
-                        <td colspan="6">Loading orders...</td>
-                    </tr>
-                </tbody>
-            </table>
+        <nav class="sidebar-nav">
+            <div class="nav-label">Management</div>
+            <button class="nav-item active" onclick="switchTab('orders')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+                Orders
+                <span class="nav-badge" id="orders-count-badge">0</span>
+            </button>
+            <button class="nav-item" onclick="switchTab('contacts')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                Messages
+                <span class="nav-badge" id="contacts-count-badge" style="background:var(--accent-blue);">0</span>
+            </button>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="/">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                View Store
+            </a>
         </div>
+    </aside>
 
-        <div id="contacts-tab" class="tab-content">
-            <h3>Contact Messages</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Message</th>
-                    </tr>
-                </thead>
-                <tbody id="contacts-tbody">
-                    <tr>
-                        <td colspan="4">Loading messages...</td>
-                    </tr>
-                </tbody>
-            </table>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- Main Content -->
+    <div class="main">
+        <header class="topbar">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle sidebar">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                </button>
+                <h1 class="topbar-title" id="topbar-title">Orders</h1>
+            </div>
+            <div class="topbar-actions">
+                <button class="btn-refresh" id="btn-refresh" onclick="refreshData()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                    Refresh
+                </button>
+            </div>
+        </header>
+
+        <div class="content">
+            <!-- Stats -->
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <div class="stat-icon green">📦</div>
+                        <span class="stat-label">Total Orders</span>
+                    </div>
+                    <div class="stat-value" id="stat-total-orders">0</div>
+                    <div class="stat-sub">All time</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <div class="stat-icon amber">⏳</div>
+                        <span class="stat-label">Pending</span>
+                    </div>
+                    <div class="stat-value" id="stat-pending">0</div>
+                    <div class="stat-sub">Awaiting action</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <div class="stat-icon blue">💰</div>
+                        <span class="stat-label">Revenue</span>
+                    </div>
+                    <div class="stat-value" id="stat-revenue">₹0</div>
+                    <div class="stat-sub">Completed orders</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <div class="stat-icon red">💬</div>
+                        <span class="stat-label">Messages</span>
+                    </div>
+                    <div class="stat-value" id="stat-messages">0</div>
+                    <div class="stat-sub">Contact inquiries</div>
+                </div>
+            </div>
+
+            <!-- Orders Panel -->
+            <div class="tab-panel active" id="orders-panel">
+                <div class="section-panel">
+                    <div class="section-header">
+                        <h2>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+                            Recent Orders
+                        </h2>
+                        <div class="filter-group">
+                            <button class="filter-btn active" onclick="filterOrders('all', this)">All</button>
+                            <button class="filter-btn" onclick="filterOrders('pending', this)">Pending</button>
+                            <button class="filter-btn" onclick="filterOrders('completed', this)">Completed</button>
+                            <button class="filter-btn" onclick="filterOrders('cancelled', this)">Cancelled</button>
+                        </div>
+                    </div>
+                    <div class="section-body">
+                        <div class="orders-list" id="orders-list">
+                            <div class="empty-state"><p>Loading orders...</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contacts Panel -->
+            <div class="tab-panel" id="contacts-panel">
+                <div class="section-panel">
+                    <div class="section-header">
+                        <h2>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                            Contact Messages
+                        </h2>
+                    </div>
+                    <div class="section-body">
+                        <div class="contacts-list" id="contacts-list">
+                            <div class="empty-state"><p>Loading messages...</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script src="admin.js"></script>
 </body>
-
 </html>
