@@ -49,11 +49,13 @@ document.addEventListener('DOMContentLoaded', () => {
         placeBtn.textContent = 'Processing...';
 
         try {
-            const res = await fetch('/api/orders', {
+            const res = await fetch('api/orders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(orderData)
             });
+            
+            const data = await res.json();
             
             if (res.ok) {
                 // Clear cart
@@ -63,12 +65,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('checkout-content').style.display = 'none';
                 document.getElementById('success-message').style.display = 'block';
             } else {
-                alert('Failed to place order. Please try again.');
+                alert(`Order failed: ${data.error || 'Please try again.'}`);
                 placeBtn.disabled = false;
                 placeBtn.textContent = 'Place Order';
             }
         } catch (err) {
-            alert('Network error. Please try again.');
+            console.error('Checkout error:', err);
+            alert(`Error: ${err.message || 'Network error. Please try again.'}`);
             placeBtn.disabled = false;
             placeBtn.textContent = 'Place Order';
         }

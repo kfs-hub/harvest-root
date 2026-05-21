@@ -7,7 +7,7 @@ function switchTab(tabId) {
 
 async function fetchOrders() {
     try {
-        const res = await fetch('/api/admin/orders');
+        const res = await fetch('api/admin/orders');
         const data = await res.json();
         const tbody = document.getElementById('orders-tbody');
         
@@ -45,7 +45,7 @@ async function fetchOrders() {
 
 async function fetchContacts() {
     try {
-        const res = await fetch('/api/admin/contacts');
+        const res = await fetch('api/admin/contacts');
         const data = await res.json();
         const tbody = document.getElementById('contacts-tbody');
         
@@ -69,7 +69,7 @@ async function fetchContacts() {
 
 async function updateOrderStatus(id, status) {
     try {
-        const res = await fetch(`/api/admin/orders/${id}/status`, {
+        const res = await fetch(`api/admin/orders/${id}/status`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status })
