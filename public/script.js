@@ -179,7 +179,7 @@ document.getElementById('contact-form').addEventListener('submit', async (e) => 
   const data = Object.fromEntries(formData.entries());
 
   try {
-    const res = await fetch('/api/contact', {
+    const res = await fetch('api/contact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -197,8 +197,11 @@ document.getElementById('contact-form').addEventListener('submit', async (e) => 
 
 // ===== CHECKOUT =====
 document.getElementById('checkout-btn').addEventListener('click', () => {
-  if (cart.length === 0) return;
-  window.location.href = '/checkout.html';
+  if (cart.length === 0) {
+    alert('Please add items to cart before proceeding to checkout.');
+    return;
+  }
+  window.location.href = 'checkout.html';
 });
 
 // ===== INIT =====
