@@ -1,18 +1,27 @@
 // ===== PRODUCT DATA =====
-const products = [
-  { id: 1, name: "Black Pepper", origin: "Coorg Estate", desc: "Bold, aromatic Tellicherry-grade peppercorns. Sun-dried for maximum pungency.", price: 350, unit: "250g", badge: "Bestseller", image: "images/black-pepper.png" },
-  { id: 2, name: "Cloves", origin: "Coorg Hills", desc: "Intensely fragrant whole cloves, hand-sorted for premium quality.", price: 420, unit: "100g", badge: "Premium", image: "images/clove2.webp" },
-  { id: 3, name: "Green Cardamom", origin: "Western Ghats", desc: "Plump, green pods bursting with sweet, floral aroma. Perfect for chai and desserts.", price: 580, unit: "100g", badge: "Popular", image: "images/cardomom.webp" },
-  { id: 4, name: "Cinnamon Sticks", origin: "Coorg Plantation", desc: "True Ceylon-style cinnamon with delicate sweetness. Rolled by hand.", price: 310, unit: "100g", badge: "", image: "images/Cinnamon_1.webp" },
-  { id: 5, name: "Star Anise", origin: "Spice Valley", desc: "Whole star anise with rich licorice notes. Essential for biryanis and stews.", price: 390, unit: "100g", badge: "", image: "images/Star Anise.jpg" },
-  { id: 6, name: "Turmeric Powder", origin: "Coorg Organic Farm", desc: "Deep golden turmeric with high curcumin content. Stone-ground fresh.", price: 180, unit: "250g", badge: "Organic", image: "images/turmaric.webp" }
-];
-
+let products = [];
 let cart = JSON.parse(localStorage.getItem('harvestRootCart')) || [];
+
+// ===== FETCH PRODUCTS FROM API =====
+async function fetchProducts() {
+  try {
+    const res = await fetch('/api/products');
+    const data = await res.json();
+    products = data.products || [];
+    renderProducts();
+  } catch (err) {
+    console.error('Error fetching products:', err);
+    const grid = document.getElementById('products-grid');
+    if (grid) {
+      grid.innerHTML = '<div class="empty-state"><p>Error loading products. Please try again later.</p></div>';
+    }
+  }
+}
 
 // ===== RENDER PRODUCTS =====
 function renderProducts() {
   const grid = document.getElementById('products-grid');
+  if (!grid) return;
   grid.innerHTML = products.map((p, i) => `
     <div class="product-card" data-animate="fade-up" data-delay="${i * 100}">
       <div class="product-image">
@@ -24,7 +33,7 @@ function renderProducts() {
         <p class="product-origin">${p.origin}</p>
         <p class="product-desc">${p.desc}</p>
         <div class="product-footer">
-          <div class="product-price">₹${p.price} <span>/ ${p.unit}</span></div>
+          <div class="product-price">&#8377;${p.price} <span>/ ${p.unit}</span></div>
           <button class="add-to-cart-btn" data-id="${p.id}" onclick="addToCart(${p.id})">Add to Cart</button>
         </div>
       </div>
@@ -83,9 +92,9 @@ function updateCart() {
         <div class="cart-item-image"><img src="${item.image}" alt="${item.name}"></div>
         <div class="cart-item-info">
           <p class="cart-item-name">${item.name}</p>
-          <p class="cart-item-price">₹${item.price} / ${item.unit}</p>
+          <p class="cart-item-price">&#8377;${item.price} / ${item.unit}</p>
           <div class="cart-item-controls">
-            <button class="qty-btn" onclick="changeQty(${item.id},-1)">−</button>
+            <button class="qty-btn" onclick="changeQty(${item.id},-1)">&#8722;</button>
             <span class="cart-item-qty">${item.qty}</span>
             <button class="qty-btn" onclick="changeQty(${item.id},1)">+</button>
             <button class="cart-item-remove" onclick="removeFromCart(${item.id})">Remove</button>
@@ -137,7 +146,6 @@ hamburger.addEventListener('click', () => {
   navLinks.classList.toggle('open');
 });
 
-// Close mobile menu on link click
 document.querySelectorAll('.nav-link').forEach(link => {
   link.addEventListener('click', () => {
     hamburger.classList.remove('active');
@@ -145,7 +153,6 @@ document.querySelectorAll('.nav-link').forEach(link => {
   });
 });
 
-// Active link on scroll
 const sections = document.querySelectorAll('section[id]');
 window.addEventListener('scroll', () => {
   const scrollY = window.scrollY + 200;
@@ -179,13 +186,13 @@ document.getElementById('contact-form').addEventListener('submit', async (e) => 
   const data = Object.fromEntries(formData.entries());
 
   try {
-    const res = await fetch('api/contact', {
+    const res = await fetch('/api/contact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     if (res.ok) {
-      showToast('Message sent! We\'ll get back to you soon.');
+      showToast("Message sent! We'll get back to you soon.");
       e.target.reset();
     } else {
       showToast('Failed to send message. Please try again.');
@@ -205,5 +212,5 @@ document.getElementById('checkout-btn').addEventListener('click', () => {
 });
 
 // ===== INIT =====
-renderProducts();
+fetchProducts();
 updateCart();

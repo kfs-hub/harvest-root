@@ -1,6 +1,7 @@
 // ===== STATE =====
 let allOrders = [];
 let allContacts = [];
+let allProducts = [];
 let currentFilter = 'all';
 
 // ===== SIDEBAR & TABS =====
@@ -28,7 +29,7 @@ function switchTab(tabId) {
 
     // Update topbar title
     document.getElementById('topbar-title').textContent =
-        tabId === 'orders' ? 'Orders' : 'Messages';
+        tabId === 'orders' ? 'Orders' : (tabId === 'contacts' ? 'Messages' : 'Products');
 
     // Close mobile sidebar
     sidebar.classList.remove('open');
@@ -62,6 +63,19 @@ async function fetchContacts() {
     }
 }
 
+async function fetchProducts() {
+    try {
+        const res = await fetch('/api/products');
+        const data = await res.json();
+        allProducts = data.products || [];
+        updateStats();
+        renderProducts();
+    } catch (err) {
+        document.getElementById('products-list-admin').innerHTML =
+            '<div class="empty-state"><p>Error loading products.</p></div>';
+    }
+}
+
 // ===== STATS =====
 function updateStats() {
     const totalOrders = allOrders.length;
@@ -76,6 +90,7 @@ function updateStats() {
     document.getElementById('stat-messages').textContent = allContacts.length;
     document.getElementById('orders-count-badge').textContent = totalOrders;
     document.getElementById('contacts-count-badge').textContent = allContacts.length;
+    document.getElementById('products-count-badge').textContent = allProducts.length;
 }
 
 // ===== RENDER ORDERS =====
@@ -197,6 +212,82 @@ function renderContacts() {
     }).join('');
 }
 
+// ===== RENDER PRODUCTS (ADMIN) =====
+function renderProducts() {
+    const container = document.getElementById('products-list-admin');
+    if (!container) return;
+
+    if (allProducts.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                <p>No products found.</p>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = allProducts.map(p => `
+        <div class="admin-product-card">
+            <img src="../${p.image}" class="admin-product-img" alt="${p.name}" onerror="this.src='https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&q=80&w=400'">
+            <div class="admin-product-info">
+                <div class="admin-product-name">${p.name}</div>
+                <div class="admin-product-meta">${p.origin} · ${p.unit}</div>
+                <div class="admin-product-edit-group">
+                    <div class="admin-product-input-wrapper">
+                        <span class="admin-product-input-prefix">₹</span>
+                        <input type="number" id="price-input-${p.id}" class="admin-product-input" value="${p.price}" min="0">
+                    </div>
+                    <button class="btn-update-price" onclick="updateProductPrice(${p.id})">Update</button>
+                    <button class="btn-delete-product" onclick="deleteProduct(${p.id})" title="Delete Product">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ===== UPDATE PRODUCT PRICE =====
+async function updateProductPrice(id) {
+    const input = document.getElementById(`price-input-${id}`);
+    if (!input) return;
+    const price = parseFloat(input.value);
+
+    if (isNaN(price) || price < 0) {
+        alert('Please enter a valid price.');
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/admin/products/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ price })
+        });
+        if (res.ok) {
+            const btn = input.parentElement.nextElementSibling;
+            const originalText = btn.textContent;
+            btn.textContent = '✓ Saved';
+            btn.style.background = 'var(--accent-emerald)';
+            btn.style.color = '#fff';
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.background = '';
+                btn.style.color = '';
+            }, 1500);
+            
+            // Quietly update local state price
+            const prod = allProducts.find(p => p.id === id);
+            if (prod) prod.price = price;
+        } else {
+            const data = await res.json();
+            alert(data.error || 'Failed to update price');
+        }
+    } catch (err) {
+        alert('Network error. Failed to update price.');
+    }
+}
+
 // ===== UPDATE ORDER STATUS =====
 async function updateOrderStatus(id, status) {
     try {
@@ -219,11 +310,62 @@ async function updateOrderStatus(id, status) {
 function refreshData() {
     const btn = document.getElementById('btn-refresh');
     btn.classList.add('spinning');
-    Promise.all([fetchOrders(), fetchContacts()]).finally(() => {
+    Promise.all([fetchOrders(), fetchContacts(), fetchProducts()]).finally(() => {
         setTimeout(() => btn.classList.remove('spinning'), 600);
+    });
+}
+
+// ===== DELETE PRODUCT =====
+async function deleteProduct(id) {
+    if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/admin/products/${id}`, {
+            method: 'DELETE'
+        });
+        if (res.ok) {
+            alert('Product deleted successfully.');
+            fetchProducts();
+        } else {
+            const data = await res.json();
+            alert(data.error || 'Failed to delete product.');
+        }
+    } catch (err) {
+        alert('Network error. Failed to delete product.');
+    }
+}
+
+// ===== ADD NEW PRODUCT =====
+const addProductForm = document.getElementById('add-product-form');
+if (addProductForm) {
+    addProductForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(addProductForm);
+        
+        try {
+            const res = await fetch('/api/admin/products', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (res.ok) {
+                alert('Product added successfully!');
+                addProductForm.reset();
+                fetchProducts();
+            } else {
+                const data = await res.json();
+                alert(data.error || 'Failed to add product.');
+            }
+        } catch (err) {
+            alert('Network error. Failed to add product.');
+        }
     });
 }
 
 // ===== INIT =====
 fetchOrders();
 fetchContacts();
+fetchProducts();

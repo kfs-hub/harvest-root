@@ -2,6 +2,38 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const db = require('./db');
+const multer = require('multer');
+const fs = require('fs');
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadDir = path.join(__dirname, 'public', 'images');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    fileFilter: (req, file, cb) => {
+        const filetypes = /jpeg|jpg|png|webp|gif/;
+        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = filetypes.test(file.mimetype);
+        if (mimetype && extname) {
+            return cb(null, true);
+        } else {
+            cb(new Error('Only images are allowed (jpeg, jpg, png, webp, gif)'));
+        }
+    },
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -68,6 +100,102 @@ app.post('/api/orders', (req, res) => {
                 }
                 res.status(201).json({ success: true, message: 'Order placed successfully!', orderId: orderId });
             });
+        });
+    });
+});
+
+// 2.5. Products: Get all products
+app.get('/api/products', (req, res) => {
+    db.all(`SELECT * FROM products ORDER BY id ASC`, [], (err, rows) => {
+        if (err) {
+            console.error('Error fetching products:', err.message);
+            return res.status(500).json({ error: 'Failed to fetch products.' });
+        }
+        res.json({ products: rows });
+    });
+});
+
+// 2.6. Admin: Update product price
+app.put('/api/admin/products/:id', (req, res) => {
+    const productId = req.params.id;
+    const { price } = req.body;
+
+    if (price === undefined || isNaN(price) || price < 0) {
+        return res.status(400).json({ error: 'Valid price is required.' });
+    }
+
+    db.run(`UPDATE products SET price = ? WHERE id = ?`, [price, productId], function(err) {
+        if (err) {
+            console.error('Error updating product price:', err.message);
+            return res.status(500).json({ error: 'Failed to update product price.' });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'Product not found.' });
+        }
+        res.json({ success: true, message: 'Product price updated successfully.' });
+    });
+});
+
+// 2.7. Admin: Add new product
+app.post('/api/admin/products', upload.single('photo'), (req, res) => {
+    const { name, origin, desc, price, unit, badge } = req.body;
+    
+    if (!req.file) {
+        return res.status(400).json({ error: 'Photo/image file is required.' });
+    }
+
+    if (!name || !origin || !desc || price === undefined || !unit) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ error: 'Name, origin, description, price, and unit are required.' });
+    }
+
+    const priceNum = parseFloat(price);
+    if (isNaN(priceNum) || priceNum < 0) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ error: 'Valid price is required.' });
+    }
+
+    const imagePath = `images/${req.file.filename}`;
+
+    const sql = `INSERT INTO products (name, origin, desc, price, unit, badge, image) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    db.run(sql, [name, origin, desc, priceNum, unit, badge || '', imagePath], function(err) {
+        if (err) {
+            console.error('Error adding product:', err.message);
+            fs.unlink(req.file.path, () => {});
+            return res.status(500).json({ error: 'Failed to add product.' });
+        }
+        res.status(201).json({ success: true, message: 'Product added successfully!', id: this.lastID });
+    });
+});
+
+// 2.8. Admin: Delete product
+app.delete('/api/admin/products/:id', (req, res) => {
+    const productId = req.params.id;
+
+    db.get(`SELECT image FROM products WHERE id = ?`, [productId], (err, product) => {
+        if (err) {
+            console.error('Error fetching product for deletion:', err.message);
+            return res.status(500).json({ error: 'Failed to fetch product.' });
+        }
+        if (!product) {
+            return res.status(404).json({ error: 'Product not found.' });
+        }
+
+        if (product.image) {
+            const absoluteImagePath = path.join(__dirname, 'public', product.image);
+            fs.unlink(absoluteImagePath, (err) => {
+                if (err) {
+                    console.warn('Could not delete product image file:', absoluteImagePath, err.message);
+                }
+            });
+        }
+
+        db.run(`DELETE FROM products WHERE id = ?`, [productId], function(err) {
+            if (err) {
+                console.error('Error deleting product from DB:', err.message);
+                return res.status(500).json({ error: 'Failed to delete product.' });
+            }
+            res.json({ success: true, message: 'Product deleted successfully.' });
         });
     });
 });
