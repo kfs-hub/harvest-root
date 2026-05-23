@@ -3,7 +3,111 @@ let allOrders = [];
 let allContacts = [];
 let allProducts = [];
 let currentFilter = 'all';
+let isAuthenticated = false;
 
+// ===== AUTH =====
+const loginOverlay = document.getElementById('login-overlay');
+const loginForm = document.getElementById('login-form');
+const loginError = document.getElementById('login-error');
+const loginBtn = document.getElementById('login-btn');
+
+function showLoginError(msg) {
+    loginError.textContent = msg;
+    loginError.classList.add('visible');
+}
+
+function hideLoginError() {
+    loginError.classList.remove('visible');
+}
+
+function showDashboard(username) {
+    isAuthenticated = true;
+    loginOverlay.classList.add('hidden');
+    document.getElementById('admin-username-display').textContent = username || 'Admin';
+}
+
+function showLogin() {
+    isAuthenticated = false;
+    loginOverlay.classList.remove('hidden');
+}
+
+// Check session on page load
+async function checkAuth() {
+    try {
+        const res = await fetch('/api/auth/check');
+        const data = await res.json();
+        if (data.authenticated) {
+            showDashboard(data.username);
+            fetchOrders();
+            fetchContacts();
+            fetchProducts();
+        } else {
+            showLogin();
+        }
+    } catch (err) {
+        showLogin();
+    }
+}
+
+// Login form submit
+loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideLoginError();
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Signing in...';
+
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+
+    try {
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            showDashboard(data.username);
+            fetchOrders();
+            fetchContacts();
+            fetchProducts();
+        } else {
+            showLoginError(data.error || 'Login failed.');
+        }
+    } catch (err) {
+        showLoginError('Network error. Is the server running?');
+    } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Sign In';
+    }
+});
+
+// Logout
+async function handleLogout() {
+    try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) {}
+    showLogin();
+    document.getElementById('login-username').value = '';
+    document.getElementById('login-password').value = '';
+    hideLoginError();
+    // Clear data
+    allOrders = [];
+    allContacts = [];
+    allProducts = [];
+    updateStats();
+}
+
+// Utility: handle 401 in any fetch
+async function authFetch(url, options = {}) {
+    const res = await fetch(url, options);
+    if (res.status === 401) {
+        showLogin();
+        throw new Error('Session expired');
+    }
+    return res;
+}
 // ===== SIDEBAR & TABS =====
 const sidebar = document.getElementById('sidebar');
 const overlay = document.getElementById('sidebar-overlay');
@@ -39,7 +143,7 @@ function switchTab(tabId) {
 // ===== DATA FETCHING =====
 async function fetchOrders() {
     try {
-        const res = await fetch('/api/admin/orders');
+        const res = await authFetch('/api/admin/orders');
         const data = await res.json();
         allOrders = data.orders || [];
         updateStats();
@@ -52,7 +156,7 @@ async function fetchOrders() {
 
 async function fetchContacts() {
     try {
-        const res = await fetch('/api/admin/contacts');
+        const res = await authFetch('/api/admin/contacts');
         const data = await res.json();
         allContacts = data.contacts || [];
         updateStats();
@@ -259,7 +363,7 @@ async function updateProductPrice(id) {
     }
 
     try {
-        const res = await fetch(`/api/admin/products/${id}`, {
+        const res = await authFetch(`/api/admin/products/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ price })
@@ -291,7 +395,7 @@ async function updateProductPrice(id) {
 // ===== UPDATE ORDER STATUS =====
 async function updateOrderStatus(id, status) {
     try {
-        const res = await fetch(`/api/admin/orders/${id}/status`, {
+        const res = await authFetch(`/api/admin/orders/${id}/status`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status })
@@ -322,7 +426,7 @@ async function deleteProduct(id) {
     }
 
     try {
-        const res = await fetch(`/api/admin/products/${id}`, {
+        const res = await authFetch(`/api/admin/products/${id}`, {
             method: 'DELETE'
         });
         if (res.ok) {
@@ -346,7 +450,7 @@ if (addProductForm) {
         const formData = new FormData(addProductForm);
         
         try {
-            const res = await fetch('/api/admin/products', {
+            const res = await authFetch('/api/admin/products', {
                 method: 'POST',
                 body: formData
             });
@@ -366,6 +470,4 @@ if (addProductForm) {
 }
 
 // ===== INIT =====
-fetchOrders();
-fetchContacts();
-fetchProducts();
+checkAuth();

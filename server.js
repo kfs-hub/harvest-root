@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const session = require('express-session');
+const bcrypt = require('bcryptjs');
 const db = require('./db');
 const multer = require('multer');
 const fs = require('fs');
@@ -41,7 +43,80 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'harvest-root-secret-key-change-in-production',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+}));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Auth middleware — protects admin API routes
+function requireAuth(req, res, next) {
+    if (req.session && req.session.adminId) {
+        return next();
+    }
+    return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+}
+
+// ===== AUTH ROUTES =====
+
+// Login
+app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password are required.' });
+    }
+
+    db.get('SELECT * FROM admins WHERE username = ?', [username], (err, admin) => {
+        if (err) {
+            console.error('Login DB error:', err.message);
+            return res.status(500).json({ error: 'Server error.' });
+        }
+        if (!admin) {
+            return res.status(401).json({ error: 'Invalid username or password.' });
+        }
+
+        bcrypt.compare(password, admin.password_hash, (err, match) => {
+            if (err) {
+                console.error('Bcrypt error:', err.message);
+                return res.status(500).json({ error: 'Server error.' });
+            }
+            if (!match) {
+                return res.status(401).json({ error: 'Invalid username or password.' });
+            }
+
+            req.session.adminId = admin.id;
+            req.session.adminUsername = admin.username;
+            res.json({ success: true, message: 'Login successful.', username: admin.username });
+        });
+    });
+});
+
+// Logout
+app.post('/api/auth/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to logout.' });
+        }
+        res.clearCookie('connect.sid');
+        res.json({ success: true, message: 'Logged out.' });
+    });
+});
+
+// Check session
+app.get('/api/auth/check', (req, res) => {
+    if (req.session && req.session.adminId) {
+        return res.json({ authenticated: true, username: req.session.adminUsername });
+    }
+    res.json({ authenticated: false });
+});
 
 // API Routes
 
@@ -116,7 +191,7 @@ app.get('/api/products', (req, res) => {
 });
 
 // 2.6. Admin: Update product price
-app.put('/api/admin/products/:id', (req, res) => {
+app.put('/api/admin/products/:id', requireAuth, (req, res) => {
     const productId = req.params.id;
     const { price } = req.body;
 
@@ -137,7 +212,7 @@ app.put('/api/admin/products/:id', (req, res) => {
 });
 
 // 2.7. Admin: Add new product
-app.post('/api/admin/products', upload.single('photo'), (req, res) => {
+app.post('/api/admin/products', requireAuth, upload.single('photo'), (req, res) => {
     const { name, origin, desc, price, unit, badge } = req.body;
     
     if (!req.file) {
@@ -169,7 +244,7 @@ app.post('/api/admin/products', upload.single('photo'), (req, res) => {
 });
 
 // 2.8. Admin: Delete product
-app.delete('/api/admin/products/:id', (req, res) => {
+app.delete('/api/admin/products/:id', requireAuth, (req, res) => {
     const productId = req.params.id;
 
     db.get(`SELECT image FROM products WHERE id = ?`, [productId], (err, product) => {
@@ -201,7 +276,7 @@ app.delete('/api/admin/products/:id', (req, res) => {
 });
 
 // 3. Admin: Get all contacts
-app.get('/api/admin/contacts', (req, res) => {
+app.get('/api/admin/contacts', requireAuth, (req, res) => {
     db.all(`SELECT * FROM contacts ORDER BY created_at DESC`, [], (err, rows) => {
         if (err) {
             return res.status(500).json({ error: 'Failed to fetch contacts.' });
@@ -211,7 +286,7 @@ app.get('/api/admin/contacts', (req, res) => {
 });
 
 // 4. Admin: Get all orders with items
-app.get('/api/admin/orders', (req, res) => {
+app.get('/api/admin/orders', requireAuth, (req, res) => {
     const sql = `
         SELECT o.id, o.customer_name, o.customer_email, o.customer_address, o.total_amount, o.status, o.created_at,
                json_group_array(json_object(
@@ -242,7 +317,7 @@ app.get('/api/admin/orders', (req, res) => {
 });
 
 // 5. Admin: Update order status
-app.put('/api/admin/orders/:id/status', (req, res) => {
+app.put('/api/admin/orders/:id/status', requireAuth, (req, res) => {
     const orderId = req.params.id;
     const { status } = req.body;
     db.run(`UPDATE orders SET status = ? WHERE id = ?`, [status, orderId], function(err) {

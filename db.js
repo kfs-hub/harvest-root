@@ -1,4 +1,5 @@
 const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcryptjs');
 const path = require('path');
 
 const dbPath = path.resolve(__dirname, 'database.sqlite');
@@ -71,6 +72,27 @@ function initDb() {
                     }
                     stmt.finalize();
                     console.log('Products table populated with initial catalog.');
+                }
+            });
+        });
+
+        // Create admins table
+        db.run(`CREATE TABLE IF NOT EXISTS admins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`, () => {
+            db.get(`SELECT COUNT(*) as count FROM admins`, (err, row) => {
+                if (!err && row.count === 0) {
+                    // Default admin: username = admin, password = harvestroot2026
+                    const hash = bcrypt.hashSync('harvestroot2026', 10);
+                    db.run(`INSERT INTO admins (username, password_hash) VALUES (?, ?)`,
+                        ['admin', hash], (err) => {
+                            if (!err) {
+                                console.log('Default admin account created. (admin / harvestroot2026)');
+                            }
+                        });
                 }
             });
         });

@@ -299,6 +299,155 @@
             display: none; position: fixed; inset: 0;
             background: rgba(0,0,0,0.5); z-index: 99;
         }
+
+        /* ===== LOGIN OVERLAY ===== */
+        .login-overlay {
+            position: fixed; inset: 0; z-index: 9999;
+            display: flex; align-items: center; justify-content: center;
+            background: url('images/hero-banner.png') center/cover no-repeat;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+        .login-overlay.hidden {
+            opacity: 0; visibility: hidden; pointer-events: none;
+        }
+        .login-overlay::before {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(135deg, rgba(250, 248, 245, 0.7) 0%, rgba(245, 240, 232, 0.85) 100%);
+            backdrop-filter: blur(8px);
+        }
+        .login-card {
+            position: relative;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 3rem 2.5rem;
+            width: 100%; max-width: 420px;
+            box-shadow: var(--shadow-lg);
+            animation: loginSlideUp 0.6s ease-out;
+        }
+        @keyframes loginSlideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .login-brand {
+            text-align: center; margin-bottom: 2rem;
+        }
+        .login-brand img {
+            width: 64px; height: 64px; border-radius: 16px;
+            margin-bottom: 1rem;
+            box-shadow: 0 8px 24px rgba(44,36,32,0.12);
+        }
+        .login-brand h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.6rem; font-weight: 700;
+            background: var(--gradient-brand);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .login-brand p {
+            color: var(--text-secondary);
+            font-size: 0.85rem; margin-top: 0.4rem;
+        }
+        .login-form { display: flex; flex-direction: column; gap: 1.25rem; }
+        .login-field {
+            display: flex; flex-direction: column; gap: 0.4rem;
+        }
+        .login-field label {
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px;
+            color: var(--text-secondary); font-weight: 600;
+        }
+        .login-field input {
+            padding: 0.8rem 1rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+            transition: all 0.25s;
+        }
+        .login-field input::placeholder { color: var(--text-muted); }
+        .login-field input:focus {
+            outline: none;
+            border-color: var(--accent-green);
+            background: var(--bg-card);
+            box-shadow: 0 0 0 3px rgba(45,90,61,0.08);
+        }
+        .login-btn {
+            padding: 0.85rem;
+            background: var(--accent-green);
+            border: none; border-radius: 10px;
+            color: #fff; font-family: 'Inter', sans-serif;
+            font-size: 0.95rem; font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.5px;
+            margin-top: 0.5rem;
+        }
+        .login-btn:hover {
+            background: var(--accent-green);
+            opacity: 0.9;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(45,90,61,0.15);
+        }
+        .login-btn:active { transform: translateY(0); }
+        .login-btn:disabled {
+            opacity: 0.6; cursor: not-allowed; transform: none;
+        }
+        .login-error {
+            background: var(--accent-red-dim);
+            border: 1px solid rgba(192,57,43,0.2);
+            color: var(--accent-red);
+            padding: 0.7rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            text-align: center;
+            display: none;
+            animation: errorShake 0.4s ease;
+        }
+        .login-error.visible { display: block; }
+        @keyframes errorShake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-6px); }
+            75% { transform: translateX(6px); }
+        }
+        .login-footer {
+            text-align: center; margin-top: 1.5rem;
+            color: var(--text-muted); font-size: 0.75rem;
+        }
+        @media (max-width: 500px) {
+            .login-card { margin: 1rem; padding: 2rem 1.5rem; }
+        }
+
+        /* ===== ADMIN USER BADGE ===== */
+        .admin-user-badge {
+            display: flex; align-items: center; gap: 8px;
+            padding: 0.4rem 0.8rem;
+            background: var(--accent-green-dim);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--accent-green);
+        }
+        .admin-user-badge svg { width: 16px; height: 16px; }
+
+        /* Logout button */
+        .btn-logout {
+            display: flex; align-items: center; gap: 8px;
+            width: 100%; padding: 0.6rem 0.75rem;
+            background: none; border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--accent-red);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem; font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-logout:hover {
+            background: var(--accent-red-dim);
+            border-color: rgba(192,57,43,0.3);
+        }
+        .btn-logout svg { width: 18px; height: 18px; }
         .sidebar-overlay.open { display: block; }
 
         /* ===== ADMIN PRODUCT CARDS ===== */
@@ -514,6 +663,30 @@
 </head>
 <body>
 
+    <!-- Login Overlay -->
+    <div class="login-overlay" id="login-overlay">
+        <div class="login-card">
+            <div class="login-brand">
+                <img src="images/harvest root logo.png" alt="Harvest Root">
+                <h1>Harvest Root</h1>
+                <p>Admin Dashboard — Sign In</p>
+            </div>
+            <form class="login-form" id="login-form">
+                <div class="login-error" id="login-error"></div>
+                <div class="login-field">
+                    <label for="login-username">Username</label>
+                    <input type="text" id="login-username" placeholder="Enter your username" autocomplete="username" required>
+                </div>
+                <div class="login-field">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" placeholder="Enter your password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="login-btn" id="login-btn">Sign In</button>
+            </form>
+            <div class="login-footer">Authorized access only</div>
+        </div>
+    </div>
+
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-brand">
@@ -546,6 +719,10 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 View Store
             </a>
+            <button class="btn-logout" id="btn-logout" onclick="handleLogout()" style="margin-top:0.5rem;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Sign Out
+            </button>
         </div>
     </aside>
 
@@ -561,6 +738,10 @@
                 <h1 class="topbar-title" id="topbar-title">Orders</h1>
             </div>
             <div class="topbar-actions">
+                <div class="admin-user-badge" id="admin-user-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span id="admin-username-display">Admin</span>
+                </div>
                 <button class="btn-refresh" id="btn-refresh" onclick="refreshData()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
                     Refresh
