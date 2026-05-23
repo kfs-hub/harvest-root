@@ -10,7 +10,9 @@ const fs = require('fs');
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = path.join(__dirname, 'public', 'images');
+        const uploadDir = process.env.NODE_ENV === 'production'
+            ? '/var/data/images'
+            : path.join(__dirname, 'public', 'images');
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -54,6 +56,9 @@ app.use(session({
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
 }));
+if (process.env.NODE_ENV === 'production') {
+    app.use('/images', express.static('/var/data/images'));
+}
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Auth middleware — protects admin API routes

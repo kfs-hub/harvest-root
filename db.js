@@ -2,7 +2,9 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const path = require('path');
 
-const dbPath = path.resolve(__dirname, 'database.sqlite');
+const dbPath = process.env.NODE_ENV === 'production' 
+    ? '/var/data/database.sqlite' 
+    : path.resolve(__dirname, 'database.sqlite');
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('Error connecting to database:', err.message);
