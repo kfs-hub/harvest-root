@@ -34,7 +34,7 @@ function showLogin() {
 // Check session on page load
 async function checkAuth() {
     try {
-        const res = await fetch('/api/auth/check');
+        const res = await fetch('/api/auth/check', { credentials: 'include' });
         const data = await res.json();
         if (data.authenticated) {
             showDashboard(data.username);
@@ -63,7 +63,8 @@ loginForm.addEventListener('submit', async (e) => {
         const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify({ username, password }),
+            credentials: 'include'
         });
         const data = await res.json();
 
@@ -86,7 +87,7 @@ loginForm.addEventListener('submit', async (e) => {
 // Logout
 async function handleLogout() {
     try {
-        await fetch('/api/auth/logout', { method: 'POST' });
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     } catch (err) {}
     showLogin();
     document.getElementById('login-username').value = '';
@@ -101,6 +102,7 @@ async function handleLogout() {
 
 // Utility: handle 401 in any fetch
 async function authFetch(url, options = {}) {
+    options.credentials = 'include';
     const res = await fetch(url, options);
     if (res.status === 401) {
         showLogin();
