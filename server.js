@@ -10,9 +10,18 @@ const fs = require('fs');
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = process.env.NODE_ENV === 'production'
-            ? '/var/data/images'
-            : path.join(__dirname, 'public', 'images');
+        let uploadDir = path.join(__dirname, 'public', 'images');
+        if (process.env.NODE_ENV === 'production') {
+            const prodDir = '/var/data/images';
+            try {
+                if (!fs.existsSync(prodDir)) {
+                    fs.mkdirSync(prodDir, { recursive: true });
+                }
+                uploadDir = prodDir;
+            } catch (e) {
+                console.warn('⚠️ Could not write to /var/data/images. Falling back to local public/images.', e.message);
+            }
+        }
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -57,7 +66,14 @@ app.use(session({
     }
 }));
 if (process.env.NODE_ENV === 'production') {
-    app.use('/images', express.static('/var/data/images'));
+    const prodDir = '/var/data/images';
+    try {
+        if (fs.existsSync(prodDir)) {
+            app.use('/images', express.static(prodDir));
+        }
+    } catch (e) {
+        // No-op
+    }
 }
 app.use(express.static(path.join(__dirname, 'public')));
 

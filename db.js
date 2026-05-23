@@ -2,9 +2,20 @@ const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const path = require('path');
 
-const dbPath = process.env.NODE_ENV === 'production' 
-    ? '/var/data/database.sqlite' 
-    : path.resolve(__dirname, 'database.sqlite');
+const fs = require('fs');
+
+let dbPath = path.resolve(__dirname, 'database.sqlite');
+if (process.env.NODE_ENV === 'production') {
+    const prodDir = '/var/data';
+    try {
+        if (!fs.existsSync(prodDir)) {
+            fs.mkdirSync(prodDir, { recursive: true });
+        }
+        dbPath = path.join(prodDir, 'database.sqlite');
+    } catch (e) {
+        console.warn('⚠️ Could not write to /var/data (persistent disk not mounted). Falling back to local directory.', e.message);
+    }
+}
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('Error connecting to database:', err.message);
