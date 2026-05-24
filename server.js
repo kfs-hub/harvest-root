@@ -145,6 +145,109 @@ app.get('/api/auth/check', (req, res) => {
     res.json({ authenticated: false });
 });
 
+// ===== USER (CUSTOMER) AUTH ROUTES =====
+
+// User Register
+app.post('/api/user/register', (req, res) => {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+        return res.status(400).json({ error: 'Name, email, and password are required.' });
+    }
+    if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
+
+    // Check if email already exists
+    db.get('SELECT id FROM users WHERE email = ?', [email.toLowerCase()], (err, existing) => {
+        if (err) {
+            return res.status(500).json({ error: 'Server error.' });
+        }
+        if (existing) {
+            return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
+        }
+
+        const hash = bcrypt.hashSync(password, 10);
+        db.run('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
+            [name.trim(), email.toLowerCase().trim(), hash], function(err) {
+                if (err) {
+                    return res.status(500).json({ error: 'Failed to create account.' });
+                }
+                req.session.userId = this.lastID;
+                req.session.userName = name.trim();
+                req.session.userEmail = email.toLowerCase().trim();
+                res.status(201).json({ success: true, message: 'Account created!', user: { name: name.trim(), email: email.toLowerCase().trim() } });
+            });
+    });
+});
+
+// User Login
+app.post('/api/user/login', (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    db.get('SELECT * FROM users WHERE email = ?', [email.toLowerCase()], (err, user) => {
+        if (err) {
+            return res.status(500).json({ error: 'Server error.' });
+        }
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid email or password.' });
+        }
+
+        const match = bcrypt.compareSync(password, user.password_hash);
+        if (!match) {
+            return res.status(401).json({ error: 'Invalid email or password.' });
+        }
+
+        req.session.userId = user.id;
+        req.session.userName = user.name;
+        req.session.userEmail = user.email;
+        res.json({ success: true, user: { name: user.name, email: user.email, address: user.address || '' } });
+    });
+});
+
+// User Logout
+app.post('/api/user/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to logout.' });
+        }
+        res.clearCookie('connect.sid');
+        res.json({ success: true });
+    });
+});
+
+// User Check Session
+app.get('/api/user/check', (req, res) => {
+    if (req.session && req.session.userId) {
+        db.get('SELECT name, email, address FROM users WHERE id = ?', [req.session.userId], (err, user) => {
+            if (err || !user) {
+                return res.json({ authenticated: false });
+            }
+            res.json({ authenticated: true, user: { name: user.name, email: user.email, address: user.address || '' } });
+        });
+    } else {
+        res.json({ authenticated: false });
+    }
+});
+
+// User Update Profile (address)
+app.put('/api/user/profile', (req, res) => {
+    if (!req.session || !req.session.userId) {
+        return res.status(401).json({ error: 'Please log in.' });
+    }
+    const { address } = req.body;
+    db.run('UPDATE users SET address = ? WHERE id = ?', [address || '', req.session.userId], function(err) {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to update profile.' });
+        }
+        res.json({ success: true });
+    });
+});
+
 // API Routes
 
 // 1. Contact Form Submission

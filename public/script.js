@@ -208,9 +208,200 @@ document.getElementById('checkout-btn').addEventListener('click', () => {
     alert('Please add items to cart before proceeding to checkout.');
     return;
   }
+  // Require user login before checkout
+  if (!currentUser) {
+    closeCart();
+    pendingCheckout = true;
+    openAuthModal();
+    showToast('Please sign in or create an account to place your order.');
+    return;
+  }
   window.location.href = 'checkout.html';
+});
+
+// ===== USER AUTH =====
+let currentUser = null;
+let pendingCheckout = false;
+
+const authOverlay = document.getElementById('auth-overlay');
+const authClose = document.getElementById('auth-close');
+const authLoginView = document.getElementById('auth-login-view');
+const authRegisterView = document.getElementById('auth-register-view');
+const authProfileView = document.getElementById('auth-profile-view');
+const userBtn = document.getElementById('user-btn');
+const userBadge = document.getElementById('user-name-badge');
+
+function openAuthModal() {
+  authOverlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeAuthModal() {
+  authOverlay.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function showAuthView(view) {
+  authLoginView.style.display = 'none';
+  authRegisterView.style.display = 'none';
+  authProfileView.style.display = 'none';
+  // Clear errors
+  document.querySelectorAll('.auth-error').forEach(el => { el.classList.remove('visible'); el.textContent = ''; });
+  if (view === 'login') authLoginView.style.display = 'block';
+  else if (view === 'register') authRegisterView.style.display = 'block';
+  else if (view === 'profile') authProfileView.style.display = 'block';
+}
+
+function updateUserUI() {
+  if (currentUser) {
+    userBadge.textContent = currentUser.name.charAt(0).toUpperCase();
+    userBadge.style.display = 'inline-flex';
+    userBtn.style.color = 'var(--green)';
+    // Update profile view
+    document.getElementById('auth-avatar').textContent = currentUser.name.charAt(0).toUpperCase();
+    document.getElementById('auth-profile-name').textContent = currentUser.name;
+    document.getElementById('auth-profile-email').textContent = currentUser.email;
+  } else {
+    userBadge.style.display = 'none';
+    userBtn.style.color = '';
+  }
+}
+
+// Check user session on page load
+async function checkUserSession() {
+  try {
+    const res = await fetch('/api/user/check', { credentials: 'include' });
+    const data = await res.json();
+    if (data.authenticated) {
+      currentUser = data.user;
+      updateUserUI();
+    }
+  } catch (err) { /* not logged in */ }
+}
+
+// User button click
+userBtn.addEventListener('click', () => {
+  if (currentUser) {
+    showAuthView('profile');
+  } else {
+    showAuthView('login');
+  }
+  openAuthModal();
+});
+
+// Close modal
+authClose.addEventListener('click', closeAuthModal);
+authOverlay.addEventListener('click', (e) => {
+  if (e.target === authOverlay) closeAuthModal();
+});
+
+// Toggle between login and register
+document.getElementById('show-register').addEventListener('click', (e) => {
+  e.preventDefault();
+  showAuthView('register');
+});
+document.getElementById('show-login').addEventListener('click', (e) => {
+  e.preventDefault();
+  showAuthView('login');
+});
+
+// Login form
+document.getElementById('auth-login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('auth-login-error');
+  const btn = document.getElementById('auth-login-btn');
+  errorEl.classList.remove('visible');
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+
+  const email = document.getElementById('auth-login-email').value;
+  const password = document.getElementById('auth-login-password').value;
+
+  try {
+    const res = await fetch('/api/user/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      currentUser = data.user;
+      updateUserUI();
+      closeAuthModal();
+      showToast(`Welcome back, ${currentUser.name}!`);
+      if (pendingCheckout) {
+        pendingCheckout = false;
+        window.location.href = 'checkout.html';
+      }
+    } else {
+      errorEl.textContent = data.error || 'Login failed.';
+      errorEl.classList.add('visible');
+    }
+  } catch (err) {
+    errorEl.textContent = 'Network error. Please try again.';
+    errorEl.classList.add('visible');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+});
+
+// Register form
+document.getElementById('auth-register-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('auth-register-error');
+  const btn = document.getElementById('auth-register-btn');
+  errorEl.classList.remove('visible');
+  btn.disabled = true;
+  btn.textContent = 'Creating account...';
+
+  const name = document.getElementById('auth-reg-name').value;
+  const email = document.getElementById('auth-reg-email').value;
+  const password = document.getElementById('auth-reg-password').value;
+
+  try {
+    const res = await fetch('/api/user/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      currentUser = data.user;
+      updateUserUI();
+      closeAuthModal();
+      showToast(`Welcome to Harvest Root, ${currentUser.name}! 🌿`);
+      if (pendingCheckout) {
+        pendingCheckout = false;
+        window.location.href = 'checkout.html';
+      }
+    } else {
+      errorEl.textContent = data.error || 'Registration failed.';
+      errorEl.classList.add('visible');
+    }
+  } catch (err) {
+    errorEl.textContent = 'Network error. Please try again.';
+    errorEl.classList.add('visible');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Account';
+  }
+});
+
+// Logout
+document.getElementById('auth-logout-btn').addEventListener('click', async () => {
+  try {
+    await fetch('/api/user/logout', { method: 'POST', credentials: 'include' });
+  } catch (err) {}
+  currentUser = null;
+  updateUserUI();
+  closeAuthModal();
+  showToast('You have been signed out.');
 });
 
 // ===== INIT =====
 fetchProducts();
 updateCart();
+checkUserSession();
