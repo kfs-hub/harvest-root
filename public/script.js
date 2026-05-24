@@ -372,12 +372,7 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      if (data.otp) {
-        document.getElementById('auth-otp-instructions').innerHTML = `We sent a 6-digit code to ${email}<br><strong style="color: var(--green); display: block; margin-top: 8px; font-size: 0.9rem;">Dev Mode: Use verification code ${data.otp}</strong>`;
-        console.log(`[Dev Mode] Verification code: ${data.otp}`);
-      } else {
-        document.getElementById('auth-otp-instructions').textContent = `We sent a 6-digit code to ${email}`;
-      }
+      document.getElementById('auth-otp-instructions').textContent = `We sent a 6-digit code to ${email}`;
       document.getElementById('auth-otp-code').value = '';
       showAuthView('otp');
       showToast('Verification code sent! Please check your inbox.');
