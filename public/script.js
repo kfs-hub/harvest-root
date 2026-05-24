@@ -227,6 +227,7 @@ const authOverlay = document.getElementById('auth-overlay');
 const authClose = document.getElementById('auth-close');
 const authLoginView = document.getElementById('auth-login-view');
 const authRegisterView = document.getElementById('auth-register-view');
+const authOtpView = document.getElementById('auth-otp-view');
 const authProfileView = document.getElementById('auth-profile-view');
 const userBtn = document.getElementById('user-btn');
 const userBadge = document.getElementById('user-name-badge');
@@ -244,11 +245,13 @@ function closeAuthModal() {
 function showAuthView(view) {
   authLoginView.style.display = 'none';
   authRegisterView.style.display = 'none';
+  authOtpView.style.display = 'none';
   authProfileView.style.display = 'none';
   // Clear errors
   document.querySelectorAll('.auth-error').forEach(el => { el.classList.remove('visible'); el.textContent = ''; });
   if (view === 'login') authLoginView.style.display = 'block';
   else if (view === 'register') authRegisterView.style.display = 'block';
+  else if (view === 'otp') authOtpView.style.display = 'block';
   else if (view === 'profile') authProfileView.style.display = 'block';
 }
 
@@ -354,7 +357,7 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
   const btn = document.getElementById('auth-register-btn');
   errorEl.classList.remove('visible');
   btn.disabled = true;
-  btn.textContent = 'Creating account...';
+  btn.textContent = 'Sending code...';
 
   const name = document.getElementById('auth-reg-name').value;
   const email = document.getElementById('auth-reg-email').value;
@@ -369,14 +372,10 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      currentUser = data.user;
-      updateUserUI();
-      closeAuthModal();
-      showToast(`Welcome to Harvest Root, ${currentUser.name}! 🌿`);
-      if (pendingCheckout) {
-        pendingCheckout = false;
-        window.location.href = 'checkout.html';
-      }
+      document.getElementById('auth-otp-instructions').textContent = `We sent a 6-digit code to ${email}`;
+      document.getElementById('auth-otp-code').value = '';
+      showAuthView('otp');
+      showToast('Verification code sent! Please check your inbox.');
     } else {
       errorEl.textContent = data.error || 'Registration failed.';
       errorEl.classList.add('visible');
@@ -387,6 +386,53 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
   } finally {
     btn.disabled = false;
     btn.textContent = 'Create Account';
+  }
+});
+
+// Cancel OTP / Go back
+document.getElementById('cancel-otp').addEventListener('click', (e) => {
+  e.preventDefault();
+  showAuthView('register');
+});
+
+// OTP verification form submit
+document.getElementById('auth-otp-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('auth-otp-error');
+  const btn = document.getElementById('auth-otp-btn');
+  errorEl.classList.remove('visible');
+  btn.disabled = true;
+  btn.textContent = 'Verifying...';
+
+  const code = document.getElementById('auth-otp-code').value.trim();
+
+  try {
+    const res = await fetch('/api/user/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      currentUser = data.user;
+      updateUserUI();
+      closeAuthModal();
+      showToast(`Welcome to Harvest Root, ${currentUser.name}! 🌿`);
+      if (pendingCheckout) {
+        pendingCheckout = false;
+        window.location.href = 'checkout.html';
+      }
+    } else {
+      errorEl.textContent = data.error || 'Verification failed.';
+      errorEl.classList.add('visible');
+    }
+  } catch (err) {
+    errorEl.textContent = 'Network error. Please try again.';
+    errorEl.classList.add('visible');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Verify Code';
   }
 });
 

@@ -48,6 +48,71 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
+// ===== EMAIL / OTP VERIFICATION CONFIG =====
+const nodemailer = require('nodemailer');
+
+let transporter;
+if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    // Production SMTP
+    transporter = nodemailer.createTransport({
+        service: process.env.EMAIL_SERVICE || 'gmail',
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS
+        }
+    });
+} else {
+    // Development fallback using Ethereal Fake SMTP
+    nodemailer.createTestAccount().then(account => {
+        transporter = nodemailer.createTransport({
+            host: account.smtp.host,
+            port: account.smtp.port,
+            secure: account.smtp.secure,
+            auth: {
+                user: account.user,
+                pass: account.pass
+            }
+        });
+        console.log('✉️ Dev Ethereal SMTP initialized. Emails will log in console.');
+    }).catch(err => {
+        console.error('Failed to initialize Dev SMTP:', err.message);
+    });
+}
+
+async function sendOTPEmail(toEmail, toName, otpCode) {
+    const mailOptions = {
+        from: `"Harvest Root" <${process.env.EMAIL_USER || 'no-reply@harvestroot.com'}>`,
+        to: toEmail,
+        subject: `${otpCode} is your Harvest Root verification code`,
+        html: `
+            <div style="font-family: 'Inter', sans-serif; max-width: 500px; margin: 0 auto; padding: 2rem; border: 1px solid #f0eae1; border-radius: 12px; background-color: #fdfcf7;">
+                <div style="text-align: center; margin-bottom: 1.5rem;">
+                    <h2 style="font-family: 'Playfair Display', serif; color: #2d5a3d; margin: 0; font-size: 1.8rem;">Harvest Root</h2>
+                    <p style="color: #8c7e6c; font-size: 0.85rem; margin-top: 0.25rem;">Pure Organic Spices from Coorg</p>
+                </div>
+                <h3 style="font-family: 'Playfair Display', serif; color: #2c2420; text-align: center; font-size: 1.3rem;">Verify your email address</h3>
+                <p style="color: #554a42; font-size: 0.95rem; line-height: 1.5;">Hi ${toName},</p>
+                <p style="color: #554a42; font-size: 0.95rem; line-height: 1.5;">Thank you for creating an account with Harvest Root. Please use the following 6-digit verification code to complete your signup. This code is valid for 10 minutes.</p>
+                <div style="text-align: center; margin: 2rem 0;">
+                    <span style="font-size: 2.2rem; font-weight: 700; letter-spacing: 6px; color: #2d5a3d; background: #f0eae1; padding: 0.75rem 2rem; border-radius: 8px; border: 1px dashed #d1c7bd; display: inline-block;">${otpCode}</span>
+                </div>
+                <p style="color: #8c7e6c; font-size: 0.8rem; line-height: 1.4; text-align: center;">If you didn't request this code, you can safely ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #f0eae1; margin: 2rem 0;">
+                <p style="color: #8c7e6c; font-size: 0.8rem; text-align: center; margin: 0;">© 2026 Harvest Root. Coorg Plantation, Karnataka, India.</p>
+            </div>
+        `
+    };
+
+    if (!transporter) {
+        throw new Error('Email transporter not ready');
+    }
+    const info = await transporter.sendMail(mailOptions);
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    if (previewUrl) {
+        console.log(`\n✉️ [Test Email Preview Link]: ${previewUrl}\n`);
+    }
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -147,7 +212,7 @@ app.get('/api/auth/check', (req, res) => {
 
 // ===== USER (CUSTOMER) AUTH ROUTES =====
 
-// User Register
+// User Register (Initiates OTP sending)
 app.post('/api/user/register', (req, res) => {
     const { name, email, password } = req.body;
 
@@ -159,7 +224,7 @@ app.post('/api/user/register', (req, res) => {
     }
 
     // Check if email already exists
-    db.get('SELECT id FROM users WHERE email = ?', [email.toLowerCase()], (err, existing) => {
+    db.get('SELECT id FROM users WHERE email = ?', [email.toLowerCase()], async (err, existing) => {
         if (err) {
             return res.status(500).json({ error: 'Server error.' });
         }
@@ -167,18 +232,59 @@ app.post('/api/user/register', (req, res) => {
             return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
         }
 
+        const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Generate 6-digit code
+        const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes from now
         const hash = bcrypt.hashSync(password, 10);
-        db.run('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
-            [name.trim(), email.toLowerCase().trim(), hash], function(err) {
-                if (err) {
-                    return res.status(500).json({ error: 'Failed to create account.' });
-                }
-                req.session.userId = this.lastID;
-                req.session.userName = name.trim();
-                req.session.userEmail = email.toLowerCase().trim();
-                res.status(201).json({ success: true, message: 'Account created!', user: { name: name.trim(), email: email.toLowerCase().trim() } });
-            });
+
+        // Store registration info temporarily in session
+        req.session.tempUser = {
+            name: name.trim(),
+            email: email.toLowerCase().trim(),
+            password_hash: hash,
+            otp: otp,
+            expiresAt: expiresAt
+        };
+
+        try {
+            await sendOTPEmail(email.toLowerCase().trim(), name.trim(), otp);
+            res.status(200).json({ success: true, message: 'Verification code sent to your email.' });
+        } catch (mailErr) {
+            console.error('Failed to send verification email:', mailErr.message);
+            res.status(500).json({ error: 'Failed to send verification email. Please try again later.' });
+        }
     });
+});
+
+// Verify Registration OTP
+app.post('/api/user/verify-otp', (req, res) => {
+    const { code } = req.body;
+    const tempUser = req.session.tempUser;
+
+    if (!tempUser) {
+        return res.status(400).json({ error: 'Session expired. Please sign up again.' });
+    }
+
+    if (Date.now() > tempUser.expiresAt) {
+        delete req.session.tempUser;
+        return res.status(400).json({ error: 'Verification code expired. Please sign up again.' });
+    }
+
+    if (code !== tempUser.otp) {
+        return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
+    }
+
+    // Insert user into database
+    db.run('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
+        [tempUser.name, tempUser.email, tempUser.password_hash], function(err) {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to create account.' });
+            }
+            req.session.userId = this.lastID;
+            req.session.userName = tempUser.name;
+            req.session.userEmail = tempUser.email;
+            delete req.session.tempUser; // Clear temp user state
+            res.status(201).json({ success: true, message: 'Account verified & created!', user: { name: tempUser.name, email: tempUser.email } });
+        });
 });
 
 // User Login

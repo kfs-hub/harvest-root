@@ -404,6 +404,21 @@
                 <p class="auth-switch">Already have an account? <a href="#" id="show-login">Sign in</a></p>
             </div>
 
+            <!-- OTP Verification Form -->
+            <div id="auth-otp-view" style="display:none;">
+                <h3 class="auth-title">Verify Email</h3>
+                <p class="auth-subtitle" id="auth-otp-instructions">We've sent a 6-digit code to your email</p>
+                <form id="auth-otp-form" class="auth-form">
+                    <div class="auth-field">
+                        <label for="auth-otp-code">Verification Code</label>
+                        <input type="text" id="auth-otp-code" placeholder="123456" pattern="\d{6}" maxlength="6" style="text-align: center; letter-spacing: 4px; font-size: 1.25rem;" required>
+                    </div>
+                    <div class="auth-error" id="auth-otp-error"></div>
+                    <button type="submit" class="auth-btn" id="auth-otp-btn">Verify Code</button>
+                </form>
+                <p class="auth-switch"><a href="#" id="cancel-otp">Back to Sign Up</a></p>
+            </div>
+
             <!-- Logged In View -->
             <div id="auth-profile-view" style="display:none;">
                 <div class="auth-profile-header">
