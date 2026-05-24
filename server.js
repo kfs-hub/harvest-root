@@ -51,16 +51,24 @@ const upload = multer({
 // ===== EMAIL / OTP VERIFICATION CONFIG =====
 const nodemailer = require('nodemailer');
 
+const emailUser = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim() : '';
+const emailPass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.trim() : '';
+const emailService = process.env.EMAIL_SERVICE ? process.env.EMAIL_SERVICE.trim() : 'gmail';
+
 let transporter;
-if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+if (emailUser && emailPass) {
     // Production SMTP
     transporter = nodemailer.createTransport({
-        service: process.env.EMAIL_SERVICE || 'gmail',
+        service: emailService,
         auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS
+            user: emailUser,
+            pass: emailPass
         }
     });
+
+    transporter.verify()
+        .then(() => console.log('✉️ SMTP transporter verified.'))
+        .catch(err => console.error('✉️ SMTP transporter verification failed:', err.message));
 } else {
     // Development fallback using Ethereal Fake SMTP
     nodemailer.createTestAccount().then(account => {
@@ -81,7 +89,7 @@ if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
 
 async function sendOTPEmail(toEmail, toName, otpCode) {
     const mailOptions = {
-        from: `"Harvest Root" <${process.env.EMAIL_USER || 'no-reply@harvestroot.com'}>`,
+        from: `"Harvest Root" <${emailUser || 'no-reply@harvestroot.com'}>`,
         to: toEmail,
         subject: `${otpCode} is your Harvest Root verification code`,
         html: `
@@ -245,7 +253,7 @@ app.post('/api/user/register', (req, res) => {
             expiresAt: expiresAt
         };
 
-        const isEmailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+        const isEmailConfigured = !!(emailUser && emailPass);
 
         try {
             await sendOTPEmail(email.toLowerCase().trim(), name.trim(), otp);
