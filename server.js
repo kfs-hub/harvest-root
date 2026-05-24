@@ -155,6 +155,7 @@ const usePersistentDisk = process.env.NODE_ENV === 'production'
     || process.env.RENDER_SERVICE_ID
     || process.env.DATA_DIR;
 
+// Serve uploaded images from persistent disk (if available)
 if (usePersistentDisk) {
     const prodDir = path.join(persistentDataDir, 'images');
     try {
@@ -165,6 +166,8 @@ if (usePersistentDisk) {
         // No-op
     }
 }
+
+// Always serve public folder as fallback
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Auth middleware — protects admin API routes
@@ -546,11 +549,11 @@ app.get('/api/admin/contacts', requireAuth, (req, res) => {
 app.get('/api/admin/orders', requireAuth, (req, res) => {
     const sql = `
         SELECT o.id, o.customer_name, o.customer_email, o.customer_address, o.total_amount, o.status, o.created_at,
-               json_group_array(json_object(
+               COALESCE(json_group_array(json_object(
                    'product_name', oi.product_name,
                    'quantity', oi.quantity,
                    'price', oi.price
-               )) as items
+               )), '[]') as items
         FROM orders o
         LEFT JOIN order_items oi ON o.id = oi.order_id
         GROUP BY o.id
@@ -566,7 +569,7 @@ app.get('/api/admin/orders', requireAuth, (req, res) => {
         // parse the JSON string for items
         const formattedRows = rows.map(row => ({
             ...row,
-            items: JSON.parse(row.items)
+            items: JSON.parse(row.items || '[]')
         }));
 
         res.json({ orders: formattedRows });

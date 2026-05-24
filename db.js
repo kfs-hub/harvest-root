@@ -89,12 +89,10 @@ function initDb() {
             db.get(`SELECT COUNT(*) as count FROM products`, (err, row) => {
                 if (!err && row.count === 0) {
                     const initialProducts = [
-                        [1, "Black Pepper", "Coorg Estate", "Bold, aromatic Tellicherry-grade peppercorns. Sun-dried for maximum pungency.", 350, "250g", "Bestseller", "images/black-pepper.png"],
-                        [2, "Cloves", "Coorg Hills", "Intensely fragrant whole cloves, hand-sorted for premium quality.", 420, "100g", "Premium", "images/clove2.webp"],
-                        [3, "Green Cardamom", "Western Ghats", "Plump, green pods bursting with sweet, floral aroma. Perfect for chai and desserts.", 580, "100g", "Popular", "images/cardomom.webp"],
-                        [4, "Cinnamon Sticks", "Coorg Plantation", "True Ceylon-style cinnamon with delicate sweetness. Rolled by hand.", 310, "100g", "", "images/Cinnamon_1.webp"],
-                        [5, "Star Anise", "Spice Valley", "Whole star anise with rich licorice notes. Essential for biryanis and stews.", 390, "100g", "", "images/Star Anise.jpg"],
-                        [6, "Turmeric Powder", "Coorg Organic Farm", "Deep golden turmeric with high curcumin content. Stone-ground fresh.", 180, "250g", "Organic", "images/turmaric.webp"]
+                        [1, "Black Pepper", "Coorg Estate", "Bold, aromatic Tellicherry-grade peppercorns. Sun-dried for maximum pungency.", 350, "250g", "Bestseller", "images/Black Pepper.png"],
+                        [2, "Cloves", "Coorg Hills", "Intensely fragrant whole cloves, hand-sorted for premium quality.", 420, "100g", "Premium", "images/Cloves.png"],
+                        [3, "Green Cardamom", "Western Ghats", "Plump, green pods bursting with sweet, floral aroma. Perfect for chai and desserts.", 580, "100g", "Popular", "images/Cardamom.png"],
+                        [4, "Cinnamon Sticks", "Coorg Plantation", "True Ceylon-style cinnamon with delicate sweetness. Rolled by hand.", 310, "100g", "", "images/Cinnamon Sticks.png"]
                     ];
                     const stmt = db.prepare(`INSERT INTO products (id, name, origin, desc, price, unit, badge, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
                     for (let p of initialProducts) {

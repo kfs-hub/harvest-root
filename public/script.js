@@ -164,6 +164,24 @@ window.addEventListener('scroll', () => {
     if (link) { link.classList.toggle('active', scrollY >= top && scrollY < top + height); }
   });
 });
+// ===== NAVBAR SCROLL INTERACTION =====
+document.addEventListener('DOMContentLoaded', () => {
+  const navbar = document.getElementById('navbar');
+  
+  const handleScroll = () => {
+    if (window.scrollY > 20) {
+      navbar.classList.add('scrolled');
+    } else {
+      navbar.classList.remove('scrolled');
+    }
+  };
+
+  // Run on load in case the page refreshes midway down
+  handleScroll();
+  
+  // Listen for scroll events
+  window.addEventListener('scroll', handleScroll);
+});
 
 // ===== SCROLL ANIMATIONS =====
 function initAnimations() {

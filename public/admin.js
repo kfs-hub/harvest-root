@@ -224,8 +224,8 @@ function renderOrders() {
             hour: '2-digit', minute: '2-digit'
         });
 
-        const itemsHTML = (o.items && o.items[0] && o.items[0].product_name)
-            ? o.items.map(i => `
+        const itemsHTML = (o.items && Array.isArray(o.items) && o.items.length > 0 && o.items[0].product_name)
+            ? o.items.filter(i => i && i.product_name).map(i => `
                 <div class="order-item-row">
                     <span class="order-item-name">${i.product_name}</span>
                     <span class="order-item-qty">×${i.quantity}</span>
