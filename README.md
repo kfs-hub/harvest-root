@@ -1,6 +1,6 @@
 # Harvest Root – Premium Spices from Coorg
 
-🌿 **Harvest Root** is a modern full‑stack web shop for premium Coorg spices. Built with **Node.js**, **Express**, **SQLite**, and a clean vanilla‑JS front‑end.
+ **Harvest Root** is a modern full‑stack web shop for premium Coorg spices. Built with **Node.js**, **Express**, **SQLite**, and a clean vanilla‑JS front‑end.
 
 ## Features
 - Beautiful product catalogue with local images
