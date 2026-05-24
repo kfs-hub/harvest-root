@@ -1,9 +1,35 @@
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const path = require('path');
+const fs = require('fs');
 const readline = require('readline');
 
-const dbPath = path.resolve(__dirname, 'database.sqlite');
+const localDbPath = path.resolve(__dirname, 'database.sqlite');
+const persistentDataDir = process.env.DB_PATH ? path.dirname(process.env.DB_PATH) : (process.env.DATA_DIR || '/var/data');
+const usePersistentDisk = process.env.DB_PATH
+    || process.env.DATA_DIR
+    || process.env.NODE_ENV === 'production'
+    || process.env.RENDER
+    || process.env.RENDER_SERVICE_ID;
+
+let dbPath = localDbPath;
+if (usePersistentDisk) {
+    const persistentDbPath = process.env.DB_PATH
+        ? path.resolve(process.env.DB_PATH)
+        : path.join(persistentDataDir, 'database.sqlite');
+
+    try {
+        if (!fs.existsSync(persistentDataDir)) {
+            fs.mkdirSync(persistentDataDir, { recursive: true });
+        }
+        if (!fs.existsSync(persistentDbPath) && fs.existsSync(localDbPath)) {
+            fs.copyFileSync(localDbPath, persistentDbPath);
+        }
+        dbPath = persistentDbPath;
+    } catch (e) {
+        console.warn('⚠️ Could not use persistent disk at', persistentDataDir, '. Falling back to local database.sqlite.', e.message);
+    }
+}
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('❌ Error connecting to database:', err.message);

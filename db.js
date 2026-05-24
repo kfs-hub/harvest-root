@@ -4,18 +4,35 @@ const path = require('path');
 
 const fs = require('fs');
 
-let dbPath = path.resolve(__dirname, 'database.sqlite');
-if (process.env.NODE_ENV === 'production') {
-    const prodDir = '/var/data';
+const localDbPath = path.resolve(__dirname, 'database.sqlite');
+const persistentDataDir = process.env.DB_PATH ? path.dirname(process.env.DB_PATH) : (process.env.DATA_DIR || '/var/data');
+let dbPath = localDbPath;
+
+const usePersistentDisk = process.env.DB_PATH
+    || process.env.DATA_DIR
+    || process.env.NODE_ENV === 'production'
+    || process.env.RENDER
+    || process.env.RENDER_SERVICE_ID;
+
+if (usePersistentDisk) {
+    const persistentDbPath = process.env.DB_PATH
+        ? path.resolve(process.env.DB_PATH)
+        : path.join(persistentDataDir, 'database.sqlite');
+
     try {
-        if (!fs.existsSync(prodDir)) {
-            fs.mkdirSync(prodDir, { recursive: true });
+        if (!fs.existsSync(persistentDataDir)) {
+            fs.mkdirSync(persistentDataDir, { recursive: true });
         }
-        dbPath = path.join(prodDir, 'database.sqlite');
+        if (!fs.existsSync(persistentDbPath) && fs.existsSync(localDbPath)) {
+            fs.copyFileSync(localDbPath, persistentDbPath);
+            console.log('Copied local database.sqlite into persistent disk:', persistentDbPath);
+        }
+        dbPath = persistentDbPath;
     } catch (e) {
-        console.warn('⚠️ Could not write to /var/data (persistent disk not mounted). Falling back to local directory.', e.message);
+        console.warn('⚠️ Could not write to persistent disk at', persistentDataDir, '. Falling back to local database.sqlite.', e.message);
     }
 }
+console.log('SQLite database file:', dbPath);
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('Error connecting to database:', err.message);

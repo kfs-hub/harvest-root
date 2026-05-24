@@ -11,15 +11,20 @@ const fs = require('fs');
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         let uploadDir = path.join(__dirname, 'public', 'images');
-        if (process.env.NODE_ENV === 'production') {
-            const prodDir = '/var/data/images';
+        const persistentDataDir = process.env.DATA_DIR || '/var/data';
+        const usePersistentDisk = process.env.NODE_ENV === 'production'
+            || process.env.RENDER
+            || process.env.RENDER_SERVICE_ID
+            || process.env.DATA_DIR;
+        if (usePersistentDisk) {
+            const prodDir = path.join(persistentDataDir, 'images');
             try {
                 if (!fs.existsSync(prodDir)) {
                     fs.mkdirSync(prodDir, { recursive: true });
                 }
                 uploadDir = prodDir;
             } catch (e) {
-                console.warn('⚠️ Could not write to /var/data/images. Falling back to local public/images.', e.message);
+                console.warn('⚠️ Could not write to persistent images directory. Falling back to local public/images.', e.message);
             }
         }
         if (!fs.existsSync(uploadDir)) {
@@ -144,8 +149,14 @@ app.use(session({
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
 }));
-if (process.env.NODE_ENV === 'production') {
-    const prodDir = '/var/data/images';
+const persistentDataDir = process.env.DATA_DIR || '/var/data';
+const usePersistentDisk = process.env.NODE_ENV === 'production'
+    || process.env.RENDER
+    || process.env.RENDER_SERVICE_ID
+    || process.env.DATA_DIR;
+
+if (usePersistentDisk) {
+    const prodDir = path.join(persistentDataDir, 'images');
     try {
         if (fs.existsSync(prodDir)) {
             app.use('/images', express.static(prodDir));
