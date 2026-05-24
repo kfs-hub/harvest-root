@@ -372,10 +372,15 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      document.getElementById('auth-otp-instructions').textContent = `We sent a 6-digit code to ${email}`;
+      if (data.otp) {
+        document.getElementById('auth-otp-instructions').textContent = `Email delivery failed. Use this code to verify: ${data.otp}`;
+        showToast('Email could not be sent. Use the code shown to verify.');
+      } else {
+        document.getElementById('auth-otp-instructions').textContent = `We sent a 6-digit code to ${email}`;
+        showToast('Verification code sent! Please check your inbox.');
+      }
       document.getElementById('auth-otp-code').value = '';
       showAuthView('otp');
-      showToast('Verification code sent! Please check your inbox.');
     } else {
       errorEl.textContent = data.error || 'Registration failed.';
       errorEl.classList.add('visible');
