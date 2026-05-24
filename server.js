@@ -245,12 +245,23 @@ app.post('/api/user/register', (req, res) => {
             expiresAt: expiresAt
         };
 
+        const isEmailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+
         try {
             await sendOTPEmail(email.toLowerCase().trim(), name.trim(), otp);
-            res.status(200).json({ success: true, message: 'Verification code sent to your email.' });
+            res.status(200).json({ 
+                success: true, 
+                message: 'Verification code sent to your email.',
+                otp: isEmailConfigured ? undefined : otp // Only expose if SMTP is not configured
+            });
         } catch (mailErr) {
-            console.error('Failed to send verification email:', mailErr.message);
-            res.status(500).json({ error: 'Failed to send verification email. Please try again later.' });
+            console.warn('⚠️ Failed to send verification email, using local console fallback:', mailErr.message);
+            console.log(`\n🔑 [EMAIL FALLBACK] Generated OTP for ${email.toLowerCase().trim()}: ${otp}\n`);
+            res.status(200).json({ 
+                success: true, 
+                message: 'Verification code generated.',
+                otp: otp // Expose since SMTP failed
+            });
         }
     });
 });
