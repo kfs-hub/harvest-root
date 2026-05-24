@@ -220,52 +220,137 @@
 
     <!-- Contact Section -->
     <section class="contact-section" id="contact">
-        <div class="container">
-            <div class="contact-grid">
-                <div class="contact-info" data-animate="fade-right">
-                    <p class="section-tag">Get in Touch</p>
-                    <h2 class="section-title">We'd Love to<br>Hear From You</h2>
-                    <p class="contact-desc">Whether you're a home cook, a restaurant, or a retailer — we'd love to share our spices with you.</p>
-                    <div class="contact-details">
-                        <div class="contact-item">
-                            <span class="contact-icon">📍</span>
-                            <div>
-                                <p class="contact-label">Visit Our Plantation</p>
-                                <p class="contact-value">Madikeri, Coorg District<br>Karnataka 571201, India</p>
-                            </div>
+
+        <!-- Animated background canvas -->
+        <canvas class="contact-canvas" id="contact-canvas" aria-hidden="true"></canvas>
+
+        <div class="container contact-container">
+
+            <!-- Left panel -->
+            <div class="contact-left" data-animate="fade-right">
+                <div class="contact-eyebrow">
+                    <span class="contact-eyebrow-line"></span>
+                    <span class="contact-eyebrow-text">Get in Touch</span>
+                </div>
+                <h2 class="contact-heading">
+                    Let's talk<br>
+                    <em>spices.</em>
+                </h2>
+                <p class="contact-sub">Whether you're a home cook, a restaurant, or a retailer — we're always happy to hear from you. We reply within 24 hours.</p>
+
+                <div class="contact-channels">
+                    <a href="mailto:harvestroot2020@gmail.com" class="contact-channel" data-animate="fade-right" data-delay="80">
+                        <div class="channel-icon-wrap">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
                         </div>
-                        <div class="contact-item">
-                            <span class="contact-icon">📧</span>
-                            <div>
-                                <p class="contact-label">Email Us</p>
-                                <p class="contact-value">harvestroot2020@gmail.com</p>
-                            </div>
+                        <div class="channel-body">
+                            <span class="channel-label">Email</span>
+                            <span class="channel-value">harvestroot2020@gmail.com</span>
                         </div>
-                        <div class="contact-item">
-                            <span class="contact-icon">📞</span>
-                            <div>
-                                <p class="contact-label">Call Us</p>
-                                <p class="contact-value">+91 9901365868</p>
-                            </div>
+                        <svg class="channel-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </a>
+
+                    <a href="tel:+919901365868" class="contact-channel" data-animate="fade-right" data-delay="160">
+                        <div class="channel-icon-wrap">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4a2 2 0 0 1 1.99-2.18h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6.13 6.13l.96-1.94a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                        </div>
+                        <div class="channel-body">
+                            <span class="channel-label">Phone</span>
+                            <span class="channel-value">+91 99013 65868</span>
+                        </div>
+                        <svg class="channel-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </a>
+
+                    <div class="contact-channel static" data-animate="fade-right" data-delay="240">
+                        <div class="channel-icon-wrap">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                        </div>
+                        <div class="channel-body">
+                            <span class="channel-label">Plantation</span>
+                            <span class="channel-value">Madikeri, Coorg · Karnataka 571201</span>
                         </div>
                     </div>
                 </div>
-                <form class="contact-form" id="contact-form" data-animate="fade-left">
-                    <div class="form-group">
-                        <label for="name">Your Name</label>
-                        <input type="text" id="name" name="name" placeholder="Enter your name" required>
+
+                <!-- Response time badge -->
+                <div class="response-badge" data-animate="fade-right" data-delay="320">
+                    <span class="response-dot"></span>
+                    <span>We typically respond within <strong>24 hours</strong></span>
+                </div>
+            </div>
+
+            <!-- Right panel – form -->
+            <div class="contact-right" data-animate="fade-left">
+                <form class="contact-form" id="contact-form" novalidate>
+
+                    <!-- Progress bar -->
+                    <div class="form-progress" id="form-progress">
+                        <div class="form-progress-fill" id="form-progress-fill"></div>
                     </div>
-                    <div class="form-group">
-                        <label for="email">Email Address</label>
-                        <input type="email" id="email" name="email" placeholder="Enter your email" required>
+
+                    <div class="cf-field" id="cf-name-field">
+                        <label class="cf-label" for="cf-name">Full Name</label>
+                        <div class="cf-input-wrap">
+                            <input class="cf-input" type="text" id="cf-name" name="name" placeholder="Jane Doe" autocomplete="name" required>
+                            <svg class="cf-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>
+                        </div>
+                        <span class="cf-error-msg">Please enter your name</span>
                     </div>
-                    <div class="form-group">
-                        <label for="message">Message</label>
-                        <textarea id="message" name="message" rows="5" placeholder="Tell us what you're looking for..." required></textarea>
+
+                    <div class="cf-field" id="cf-email-field">
+                        <label class="cf-label" for="cf-email">Email Address</label>
+                        <div class="cf-input-wrap">
+                            <input class="cf-input" type="email" id="cf-email" name="email" placeholder="jane@example.com" autocomplete="email" required>
+                            <svg class="cf-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>
+                        </div>
+                        <span class="cf-error-msg">Please enter a valid email</span>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-full" id="submit-btn">Send Message</button>
+
+                    <!-- Inquiry type selector -->
+                    <div class="cf-field">
+                        <label class="cf-label">Inquiry Type</label>
+                        <div class="cf-chips" id="cf-chips">
+                            <button type="button" class="cf-chip active" data-chip="General">General</button>
+                            <button type="button" class="cf-chip" data-chip="Wholesale">Wholesale</button>
+                            <button type="button" class="cf-chip" data-chip="Restaurant">Restaurant</button>
+                            <button type="button" class="cf-chip" data-chip="Retail">Retail</button>
+                        </div>
+                        <input type="hidden" name="inquiry" id="cf-inquiry" value="General">
+                    </div>
+
+                    <div class="cf-field" id="cf-msg-field">
+                        <label class="cf-label" for="cf-message">
+                            Your Message
+                            <span class="cf-char-count" id="cf-char-count">0 / 500</span>
+                        </label>
+                        <div class="cf-input-wrap">
+                            <textarea class="cf-input cf-textarea" id="cf-message" name="message" placeholder="Tell us what you're looking for..." maxlength="500" required></textarea>
+                            <svg class="cf-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg>
+                        </div>
+                        <span class="cf-error-msg">Please write a message</span>
+                    </div>
+
+                    <button type="submit" class="cf-submit" id="cf-submit">
+                        <span class="cf-submit-text">Send Message</span>
+                        <span class="cf-submit-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M22 2L11 13"/><path d="M22 2 15 22 11 13 2 9l20-7z"/></svg>
+                        </span>
+                        <span class="cf-submit-loader" aria-hidden="true"></span>
+                    </button>
+
+                    <!-- Success state -->
+                    <div class="cf-success" id="cf-success" aria-live="polite">
+                        <div class="cf-success-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="28" height="28"><polyline points="20 6 9 17 4 12"/></svg>
+                        </div>
+                        <p class="cf-success-title">Message sent!</p>
+                        <p class="cf-success-sub">We'll get back to you within 24 hours.</p>
+                        <button type="button" class="cf-reset-btn" id="cf-reset">Send another</button>
+                    </div>
+
                 </form>
             </div>
+
         </div>
     </section>
 

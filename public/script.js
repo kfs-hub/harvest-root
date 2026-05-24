@@ -310,27 +310,181 @@ function initAnimations() {
 }
 
 // ===== CONTACT FORM =====
-document.getElementById('contact-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const formData = new FormData(e.target);
-  const data = Object.fromEntries(formData.entries());
+(function initContactForm() {
+  const form       = document.getElementById('contact-form');
+  if (!form) return;
 
-  try {
-    const res = await fetch('/api/contact', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (res.ok) {
-      showToast("Message sent! We'll get back to you soon.");
-      e.target.reset();
-    } else {
-      showToast('Failed to send message. Please try again.');
-    }
-  } catch (err) {
-    showToast('Network error. Please try again.');
+  const nameField  = document.getElementById('cf-name-field');
+  const emailField = document.getElementById('cf-email-field');
+  const msgField   = document.getElementById('cf-msg-field');
+  const nameInput  = document.getElementById('cf-name');
+  const emailInput = document.getElementById('cf-email');
+  const msgInput   = document.getElementById('cf-message');
+  const charCount  = document.getElementById('cf-char-count');
+  const submitBtn  = document.getElementById('cf-submit');
+  const progressFill = document.getElementById('form-progress-fill');
+  const successEl  = document.getElementById('cf-success');
+  const resetBtn   = document.getElementById('cf-reset');
+  const chips      = document.querySelectorAll('.cf-chip');
+  const inquiryInput = document.getElementById('cf-inquiry');
+
+  // Progress: track how many of 3 fields are filled
+  function updateProgress() {
+    let filled = 0;
+    if (nameInput.value.trim().length > 0)  filled++;
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value)) filled++;
+    if (msgInput.value.trim().length > 10) filled++;
+    progressFill.style.width = Math.round((filled / 3) * 100) + '%';
   }
-});
+
+  // Validate a single field
+  function validate(field, input, checkFn) {
+    const ok = checkFn(input.value);
+    field.classList.toggle('valid', ok);
+    field.classList.toggle('error', !ok && input.value.length > 0);
+    updateProgress();
+    return ok;
+  }
+
+  const isName  = v => v.trim().length >= 2;
+  const isEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  const isMsg   = v => v.trim().length >= 10;
+
+  // Live validation
+  nameInput.addEventListener('input',  () => validate(nameField,  nameInput,  isName));
+  emailInput.addEventListener('input', () => validate(emailField, emailInput, isEmail));
+  msgInput.addEventListener('input',   () => {
+    validate(msgField, msgInput, isMsg);
+    const len = msgInput.value.length;
+    charCount.textContent = `${len} / 500`;
+    charCount.classList.toggle('warn',  len > 400);
+    charCount.classList.toggle('limit', len >= 500);
+  });
+
+  // Blur validation (show error only after leaving)
+  nameInput.addEventListener('blur',  () => {
+    if (!isName(nameInput.value) && nameInput.value.length > 0)
+      nameField.classList.add('error');
+  });
+  emailInput.addEventListener('blur', () => {
+    if (!isEmail(emailInput.value) && emailInput.value.length > 0)
+      emailField.classList.add('error');
+  });
+
+  // Chips
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      inquiryInput.value = chip.dataset.chip;
+    });
+  });
+
+  // Submit
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const nameOk  = validate(nameField,  nameInput,  isName);
+    const emailOk = validate(emailField, emailInput, isEmail);
+    const msgOk   = validate(msgField,   msgInput,   isMsg);
+    if (!nameOk)  { nameInput.focus(); return; }
+    if (!emailOk) { emailInput.focus(); return; }
+    if (!msgOk)   { msgInput.focus(); return; }
+
+    submitBtn.classList.add('loading');
+
+    const payload = {
+      name: nameInput.value.trim(),
+      email: emailInput.value.trim(),
+      message: msgInput.value.trim(),
+      inquiry: inquiryInput.value
+    };
+
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        successEl.classList.add('show');
+        progressFill.style.width = '100%';
+      } else {
+        showToast('Failed to send. Please try again.');
+      }
+    } catch {
+      showToast('Network error. Please try again.');
+    } finally {
+      submitBtn.classList.remove('loading');
+    }
+  });
+
+  // Reset back to form
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      successEl.classList.remove('show');
+      form.reset();
+      [nameField, emailField, msgField].forEach(f => f.classList.remove('valid','error'));
+      charCount.textContent = '0 / 500';
+      inquiryInput.value = 'General';
+      chips.forEach((c, i) => c.classList.toggle('active', i === 0));
+      progressFill.style.width = '0%';
+    });
+  }
+
+  // Particle canvas
+  const canvas = document.getElementById('contact-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [], animId;
+
+  function resize() {
+    W = canvas.width  = canvas.offsetWidth;
+    H = canvas.height = canvas.offsetHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function mkParticle() {
+    return {
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: Math.random() * 1.8 + 0.4,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: -(Math.random() * 0.4 + 0.1),
+      alpha: Math.random() * 0.5 + 0.1,
+      flicker: Math.random() * Math.PI * 2
+    };
+  }
+
+  for (let i = 0; i < 90; i++) particles.push(mkParticle());
+
+  function tick() {
+    ctx.clearRect(0, 0, W, H);
+    particles.forEach((p, i) => {
+      p.x  += p.vx;
+      p.y  += p.vy;
+      p.flicker += 0.03;
+      const a = p.alpha * (0.7 + 0.3 * Math.sin(p.flicker));
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(196,148,58,${a})`;
+      ctx.fill();
+
+      if (p.y < -5 || p.x < -5 || p.x > W + 5) particles[i] = mkParticle();
+    });
+    animId = requestAnimationFrame(tick);
+  }
+
+  // Only run canvas when section is visible
+  const sectionObserver = new IntersectionObserver(([entry]) => {
+    if (entry.isIntersecting) { tick(); }
+    else { cancelAnimationFrame(animId); }
+  }, { threshold: 0.05 });
+  sectionObserver.observe(document.getElementById('contact'));
+
+})();
 
 // ===== CHECKOUT =====
 document.getElementById('checkout-btn').addEventListener('click', () => {
