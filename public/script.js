@@ -68,60 +68,158 @@ function changeQty(id, delta) {
 
 function updateCart() {
   localStorage.setItem('harvestRootCart', JSON.stringify(cart));
-  const countEl = document.getElementById('cart-count');
-  const itemsEl = document.getElementById('cart-items');
-  const footerEl = document.getElementById('cart-footer');
-  const emptyEl = document.getElementById('cart-empty');
-  const totalEl = document.getElementById('cart-total-amount');
+
+  const countEl       = document.getElementById('cart-count');
+  const itemsEl       = document.getElementById('cart-items');
+  const footerEl      = document.getElementById('cart-footer');
+  const emptyEl       = document.getElementById('cart-empty');
+  const totalEl       = document.getElementById('cart-total-amount');
+  const itemCountEl   = document.getElementById('cart-item-count');
+  const savingsEl     = document.getElementById('cart-savings');
+  const savingsTxtEl  = document.getElementById('cart-savings-text');
+  const shippingBar   = document.getElementById('cart-shipping-bar');
+  const shippingFill  = document.getElementById('shipping-bar-fill');
+  const shippingMsg   = document.getElementById('shipping-bar-msg');
+  const shippingLeft  = document.getElementById('shipping-amount-left');
+
   const totalItems = cart.reduce((s, i) => s + i.qty, 0);
   const totalPrice = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
+  // Navbar badge
   countEl.textContent = totalItems;
   countEl.classList.toggle('show', totalItems > 0);
 
+  // Item count label
+  if (itemCountEl) {
+    itemCountEl.textContent = totalItems === 0 ? '0 items'
+      : totalItems === 1 ? '1 item' : `${totalItems} items`;
+  }
+
+  // Free shipping bar (threshold ₹500)
+  const FREE_SHIPPING = 500;
+  if (cart.length > 0 && shippingBar) {
+    shippingBar.classList.add('visible');
+    const pct = Math.min((totalPrice / FREE_SHIPPING) * 100, 100);
+    shippingFill.style.width = pct + '%';
+    const left = Math.max(FREE_SHIPPING - totalPrice, 0);
+    if (left === 0) {
+      shippingMsg.innerHTML = `<strong>🎉 You've unlocked free shipping!</strong>`;
+      shippingFill.style.background = 'var(--green)';
+    } else {
+      shippingLeft.textContent = `₹${left.toLocaleString()}`;
+      shippingMsg.innerHTML = `Add <strong id="shipping-amount-left">₹${left.toLocaleString()}</strong> more for free shipping!`;
+    }
+  } else if (shippingBar) {
+    shippingBar.classList.remove('visible');
+  }
+
   if (cart.length === 0) {
-    emptyEl.style.display = 'block';
+    emptyEl.style.display = 'flex';
     footerEl.style.display = 'none';
     itemsEl.querySelectorAll('.cart-item').forEach(el => el.remove());
-  } else {
-    emptyEl.style.display = 'none';
-    footerEl.style.display = 'block';
-    totalEl.textContent = `₹${totalPrice.toLocaleString()}`;
-    const itemsHTML = cart.map(item => `
-      <div class="cart-item">
-        <div class="cart-item-image"><img src="${item.image}" alt="${item.name}"></div>
-        <div class="cart-item-info">
-          <p class="cart-item-name">${item.name}</p>
-          <p class="cart-item-price">&#8377;${item.price} / ${item.unit}</p>
-          <div class="cart-item-controls">
-            <button class="qty-btn" onclick="changeQty(${item.id},-1)">&#8722;</button>
-            <span class="cart-item-qty">${item.qty}</span>
-            <button class="qty-btn" onclick="changeQty(${item.id},1)">+</button>
-            <button class="cart-item-remove" onclick="removeFromCart(${item.id})">Remove</button>
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  footerEl.style.display = 'block';
+  totalEl.textContent = `₹${totalPrice.toLocaleString()}`;
+
+  // Savings (if any item has originalPrice)
+  const savedTotal = cart.reduce((s, i) => {
+    return s + ((i.originalPrice ? (i.originalPrice - i.price) : 0) * i.qty);
+  }, 0);
+  if (savingsEl) {
+    if (savedTotal > 0) {
+      savingsEl.style.display = 'flex';
+      savingsTxtEl.textContent = `You're saving ₹${savedTotal.toLocaleString()}!`;
+    } else {
+      savingsEl.style.display = 'none';
+    }
+  }
+
+  // Rebuild items
+  itemsEl.querySelectorAll('.cart-item').forEach(el => el.remove());
+  const fragment = document.createDocumentFragment();
+  cart.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = 'cart-item';
+    div.dataset.id = item.id;
+    div.style.animationDelay = `${idx * 55}ms`;
+    div.innerHTML = `
+      <div class="cart-item-image">
+        <img src="${item.image}" alt="${item.name}" loading="lazy">
+      </div>
+      <div class="cart-item-info">
+        <div class="cart-item-top">
+          <div>
+            <p class="cart-item-name">${item.name}</p>
+            <p class="cart-item-unit">per ${item.unit}</p>
           </div>
+          <button class="cart-item-remove" data-remove="${item.id}" aria-label="Remove ${item.name}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="cart-item-controls">
+          <div class="qty-stepper">
+            <button class="qty-btn" data-qty="${item.id}" data-delta="-1">−</button>
+            <span class="cart-item-qty">${item.qty}</span>
+            <button class="qty-btn" data-qty="${item.id}" data-delta="1">+</button>
+          </div>
+          <span class="cart-item-line-price">₹${(item.price * item.qty).toLocaleString()}</span>
         </div>
       </div>
-    `).join('');
-    const existingItems = itemsEl.querySelectorAll('.cart-item');
-    existingItems.forEach(el => el.remove());
-    emptyEl.insertAdjacentHTML('afterend', itemsHTML);
-  }
+    `;
+    fragment.appendChild(div);
+  });
+  // Insert items right after the empty state element
+  emptyEl.parentNode.insertBefore(fragment, emptyEl.nextSibling);
 }
 
 // ===== CART SIDEBAR =====
-const cartBtn = document.getElementById('cart-btn');
+const cartBtn     = document.getElementById('cart-btn');
 const cartSidebar = document.getElementById('cart-sidebar');
 const cartOverlay = document.getElementById('cart-overlay');
-const cartClose = document.getElementById('cart-close');
+const cartClose   = document.getElementById('cart-close');
 const cartShopLink = document.getElementById('cart-shop-link');
 
-function openCart() { cartSidebar.classList.add('open'); cartOverlay.classList.add('open'); document.body.style.overflow = 'hidden'; }
+function openCart()  { cartSidebar.classList.add('open'); cartOverlay.classList.add('open'); document.body.style.overflow = 'hidden'; }
 function closeCart() { cartSidebar.classList.remove('open'); cartOverlay.classList.remove('open'); document.body.style.overflow = ''; }
 
 cartBtn.addEventListener('click', openCart);
 cartOverlay.addEventListener('click', closeCart);
 cartClose.addEventListener('click', closeCart);
-cartShopLink.addEventListener('click', () => { closeCart(); });
+if (cartShopLink) cartShopLink.addEventListener('click', closeCart);
+
+// Event delegation for qty + remove buttons
+document.getElementById('cart-items').addEventListener('click', (e) => {
+  const removeBtn = e.target.closest('[data-remove]');
+  const qtyBtn    = e.target.closest('[data-qty]');
+
+  if (removeBtn) {
+    const id = parseInt(removeBtn.dataset.remove);
+    const itemEl = removeBtn.closest('.cart-item');
+    if (itemEl) {
+      itemEl.classList.add('removing');
+      itemEl.addEventListener('animationend', () => { removeFromCart(id); }, { once: true });
+    } else {
+      removeFromCart(id);
+    }
+  }
+
+  if (qtyBtn) {
+    const id    = parseInt(qtyBtn.dataset.qty);
+    const delta = parseInt(qtyBtn.dataset.delta);
+    changeQty(id, delta);
+  }
+});
+
+// Clear cart button
+document.getElementById('cart-clear-btn').addEventListener('click', () => {
+  if (!confirm('Remove all items from your cart?')) return;
+  cart = [];
+  updateCart();
+  showToast('Cart cleared.');
+});
 
 // ===== TOAST =====
 function showToast(msg) {
@@ -164,23 +262,24 @@ window.addEventListener('scroll', () => {
     if (link) { link.classList.toggle('active', scrollY >= top && scrollY < top + height); }
   });
 });
-// ===== NAVBAR SCROLL INTERACTION =====
+// ===== NAVBAR SCROLL INTERACTION + PROGRESS BAR =====
 document.addEventListener('DOMContentLoaded', () => {
   const navbar = document.getElementById('navbar');
-  
+
   const handleScroll = () => {
-    if (window.scrollY > 20) {
-      navbar.classList.add('scrolled');
-    } else {
-      navbar.classList.remove('scrolled');
-    }
+    const scrollY = window.scrollY;
+
+    // Scrolled class for glass effect
+    navbar.classList.toggle('scrolled', scrollY > 40);
+
+    // Scroll progress bar (CSS custom property)
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const progress = docHeight > 0 ? (scrollY / docHeight) * 100 : 0;
+    navbar.style.setProperty('--scroll-progress', `${progress}%`);
   };
 
-  // Run on load in case the page refreshes midway down
   handleScroll();
-  
-  // Listen for scroll events
-  window.addEventListener('scroll', handleScroll);
+  window.addEventListener('scroll', handleScroll, { passive: true });
 });
 
 // ===== SCROLL ANIMATIONS =====
@@ -188,13 +287,26 @@ function initAnimations() {
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
-        const delay = entry.target.dataset.delay || 0;
-        setTimeout(() => entry.target.classList.add('visible'), parseInt(delay));
+        const delay = parseInt(entry.target.dataset.delay || 0);
+        setTimeout(() => entry.target.classList.add('visible'), delay);
+
+        // Stagger direct children if they have [data-animate] too
+        const children = entry.target.querySelectorAll('[data-animate]');
+        children.forEach((child, i) => {
+          const childDelay = delay + (i * 80);
+          setTimeout(() => child.classList.add('visible'), childDelay);
+          observer.unobserve(child);
+        });
+
         observer.unobserve(entry.target);
       }
     });
-  }, { threshold: 0.15 });
-  document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('[data-animate]').forEach(el => {
+    // Don't re-observe already-visible elements
+    if (!el.classList.contains('visible')) observer.observe(el);
+  });
 }
 
 // ===== CONTACT FORM =====

@@ -317,23 +317,60 @@
     <!-- Cart Sidebar -->
     <div class="cart-overlay" id="cart-overlay"></div>
     <aside class="cart-sidebar" id="cart-sidebar">
+
+        <!-- Header -->
         <div class="cart-header">
-            <h3>Your Cart</h3>
-            <button class="cart-close" id="cart-close" aria-label="Close cart">✕</button>
+            <div class="cart-header-left">
+                <h3 class="cart-title">Your Cart</h3>
+                <span class="cart-item-count" id="cart-item-count">0 items</span>
+            </div>
+            <button class="cart-close" id="cart-close" aria-label="Close cart">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
         </div>
+
+        <!-- Free shipping progress -->
+        <div class="cart-shipping-bar" id="cart-shipping-bar">
+            <div class="shipping-bar-text">
+                <span class="shipping-leaf">🌿</span>
+                <span id="shipping-bar-msg">Add <strong id="shipping-amount-left">₹500</strong> more for free shipping!</span>
+            </div>
+            <div class="shipping-bar-track">
+                <div class="shipping-bar-fill" id="shipping-bar-fill" style="width:0%"></div>
+            </div>
+        </div>
+
+        <!-- Items list -->
         <div class="cart-items" id="cart-items">
             <div class="cart-empty" id="cart-empty">
-                <span class="cart-empty-icon">🛒</span>
-                <p>Your cart is empty</p>
-                <a href="#products" class="btn btn-ghost" id="cart-shop-link">Start Shopping</a>
+                <div class="cart-empty-illustration">
+                    <div class="empty-spice-icon">🫙</div>
+                    <div class="empty-spice-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+                <p class="cart-empty-title">Your cart is bare</p>
+                <p class="cart-empty-sub">Fill it with the flavours of Coorg</p>
+                <a href="#products" class="btn btn-primary" id="cart-shop-link" style="margin-top:20px;font-size:0.85rem;padding:12px 28px;">Browse Spices</a>
             </div>
         </div>
+
+        <!-- Footer -->
         <div class="cart-footer" id="cart-footer" style="display:none;">
-            <div class="cart-total">
-                <span>Total</span>
+            <div class="cart-savings" id="cart-savings" style="display:none;">
+                <span class="savings-icon">🎁</span>
+                <span id="cart-savings-text">You're saving ₹0!</span>
+            </div>
+            <div class="cart-subtotal-row">
+                <span class="cart-subtotal-label">Subtotal</span>
                 <span class="cart-total-amount" id="cart-total-amount">₹0</span>
             </div>
-            <button class="btn btn-primary btn-full" id="checkout-btn">Proceed to Checkout</button>
+            <p class="cart-tax-note">Taxes & shipping calculated at checkout</p>
+            <button class="btn btn-primary btn-full cart-checkout-btn" id="checkout-btn">
+                <span>Proceed to Checkout</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+            <button class="cart-clear-btn" id="cart-clear-btn">Clear cart</button>
         </div>
     </aside>
 
