@@ -357,7 +357,7 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
   const btn = document.getElementById('auth-register-btn');
   errorEl.classList.remove('visible');
   btn.disabled = true;
-  btn.textContent = 'Sending code...';
+  btn.textContent = 'Creating account...';
 
   const name = document.getElementById('auth-reg-name').value;
   const email = document.getElementById('auth-reg-email').value;
@@ -372,15 +372,14 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
     });
     const data = await res.json();
     if (res.ok && data.success) {
-      if (data.otp) {
-        document.getElementById('auth-otp-instructions').textContent = `Email delivery failed. Use this code to verify: ${data.otp}`;
-        showToast('Email could not be sent. Use the code shown to verify.');
-      } else {
-        document.getElementById('auth-otp-instructions').textContent = `We sent a 6-digit code to ${email}`;
-        showToast('Verification code sent! Please check your inbox.');
+      currentUser = data.user;
+      updateUserUI();
+      closeAuthModal();
+      showToast(`Welcome to Harvest Root, ${currentUser.name}! 🌿`);
+      if (pendingCheckout) {
+        pendingCheckout = false;
+        window.location.href = 'checkout.html';
       }
-      document.getElementById('auth-otp-code').value = '';
-      showAuthView('otp');
     } else {
       errorEl.textContent = data.error || 'Registration failed.';
       errorEl.classList.add('visible');

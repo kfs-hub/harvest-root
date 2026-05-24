@@ -240,37 +240,28 @@ app.post('/api/user/register', (req, res) => {
             return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
         }
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Generate 6-digit code
-        const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes from now
         const hash = bcrypt.hashSync(password, 10);
 
-        // Store registration info temporarily in session
-        req.session.tempUser = {
-            name: name.trim(),
-            email: email.toLowerCase().trim(),
-            password_hash: hash,
-            otp: otp,
-            expiresAt: expiresAt
-        };
+        db.run('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
+            [name.trim(), email.toLowerCase().trim(), hash], function(err) {
+                if (err) {
+                    console.error('User registration DB error:', err.message);
+                    return res.status(500).json({ error: 'Failed to create account.' });
+                }
 
-        const isEmailConfigured = !!(emailUser && emailPass);
+                req.session.userId = this.lastID;
+                req.session.userName = name.trim();
+                req.session.userEmail = email.toLowerCase().trim();
 
-        try {
-            await sendOTPEmail(email.toLowerCase().trim(), name.trim(), otp);
-            res.status(200).json({ 
-                success: true, 
-                message: 'Verification code sent to your email.',
-                otp: isEmailConfigured ? undefined : otp // Only expose if SMTP is not configured
+                res.status(201).json({
+                    success: true,
+                    message: 'Account created successfully.',
+                    user: {
+                        name: name.trim(),
+                        email: email.toLowerCase().trim()
+                    }
+                });
             });
-        } catch (mailErr) {
-            console.warn('⚠️ Failed to send verification email, using local console fallback:', mailErr.message);
-            console.log(`\n🔑 [EMAIL FALLBACK] Generated OTP for ${email.toLowerCase().trim()}: ${otp}\n`);
-            res.status(200).json({ 
-                success: true, 
-                message: 'Verification code generated.',
-                otp: otp // Expose since SMTP failed
-            });
-        }
     });
 });
 
