@@ -68,7 +68,7 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
-const email = require('./email');
+const mail = require('./email');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -187,23 +187,23 @@ app.get('/api/auth/check', (req, res) => {
 
 // User Register (sends OTP — account created after verify-otp)
 app.post('/api/user/register', loginRateLimit('user-register'), (req, res) => {
-    const { name, email, password } = req.body;
+    const { name, email: userEmail, password } = req.body;
 
-    if (!name || !email || !password) {
+    if (!name || !userEmail || !password) {
         return res.status(400).json({ error: 'Name, email, and password are required.' });
     }
     const pwdError = validatePassword(password);
     if (pwdError) {
         return res.status(400).json({ error: pwdError });
     }
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(userEmail)) {
         return res.status(400).json({ error: 'Please enter a valid email address.' });
     }
     if (name.trim().length < 2) {
         return res.status(400).json({ error: 'Name must be at least 2 characters.' });
     }
 
-    const emailNorm = email.toLowerCase().trim();
+    const emailNorm = userEmail.toLowerCase().trim();
     const nameTrim = name.trim();
 
     db.get('SELECT id FROM users WHERE email = ?', [emailNorm], (err, existing) => {
@@ -228,7 +228,7 @@ app.post('/api/user/register', loginRateLimit('user-register'), (req, res) => {
             expiresAt: Date.now() + 10 * 60 * 1000
         };
 
-        const emailStatus = email.getEmailStatus();
+        const emailStatus = mail.getEmailStatus();
         if (!emailStatus.configured && process.env.NODE_ENV === 'production') {
             delete req.session.tempUser;
             return res.status(503).json({
@@ -258,7 +258,7 @@ app.post('/api/user/register', loginRateLimit('user-register'), (req, res) => {
             });
 
             // Send OTP in background so Render does not timeout the HTTP request
-            email.sendOTPEmail(emailNorm, nameTrim, otp).catch((e) => {
+            mail.sendOTPEmail(emailNorm, nameTrim, otp).catch((e) => {
                 console.error('Background OTP email failed:', e.message);
             });
         });
@@ -273,7 +273,7 @@ app.post('/api/user/resend-otp', loginRateLimit('resend-otp'), (req, res) => {
         return res.status(400).json({ error: 'Signup session expired. Please register again.' });
     }
 
-    const emailStatus = email.getEmailStatus();
+    const emailStatus = mail.getEmailStatus();
     if (!emailStatus.configured && process.env.NODE_ENV === 'production') {
         return res.status(503).json({
             error: 'Email service is not configured on the server.',
@@ -296,7 +296,7 @@ app.post('/api/user/resend-otp', loginRateLimit('resend-otp'), (req, res) => {
             email: tempUser.email
         });
 
-        email.sendOTPEmail(tempUser.email, tempUser.name, otp).catch((e) => {
+        mail.sendOTPEmail(tempUser.email, tempUser.name, otp).catch((e) => {
             console.error('Background resend OTP failed:', e.message);
         });
     });
@@ -343,16 +343,16 @@ app.post('/api/user/verify-otp', (req, res) => {
 
 // User Login
 app.post('/api/user/login', loginRateLimit('user-login'), (req, res) => {
-    const { email, password } = req.body;
+    const { email: userEmail, password } = req.body;
 
-    if (!email || !password) {
+    if (!userEmail || !password) {
         return res.status(400).json({ error: 'Email and password are required.' });
     }
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(userEmail)) {
         return res.status(400).json({ error: 'Please enter a valid email address.' });
     }
 
-    db.get('SELECT * FROM users WHERE email = ?', [email.toLowerCase().trim()], (err, user) => {
+    db.get('SELECT * FROM users WHERE email = ?', [userEmail.toLowerCase().trim()], (err, user) => {
         if (err) {
             return res.status(500).json({ error: 'Server error.' });
         }
@@ -572,7 +572,7 @@ app.post('/api/orders', requireVerifiedUser, (req, res) => {
                                 : 'Failed to complete order.';
                             return res.status(400).json({ error: msg });
                         }
-                        email.sendOrderConfirmationEmail(orderId, customerName, customerEmail, cartItems, totalAmount);
+                        mail.sendOrderConfirmationEmail(orderId, customerName, customerEmail, cartItems, totalAmount);
                         res.status(201).json({ success: true, message: 'Order placed successfully!', orderId });
                     });
                 }
@@ -782,7 +782,7 @@ app.put('/api/admin/orders/:id/status', requireAdmin, (req, res) => {
 app.get('/api/health', (req, res) => {
     res.json({
         ok: true,
-        email: email.getEmailStatus(),
+        email: mail.getEmailStatus(),
         sessionSecretSet: !!process.env.SESSION_SECRET
     });
 });
@@ -801,18 +801,26 @@ app.use((req, res) => {
     res.status(404).json({ error: 'Not found' });
 });
 
+// Prevent crashes from becoming 502 on Render
+app.use((err, req, res, next) => {
+    console.error('Unhandled error:', err.message);
+    if (!res.headersSent) {
+        res.status(500).json({ error: 'Server error. Please try again.' });
+    }
+});
+
 // Start server — email init must not block deploy (SMTP verify can timeout on Render)
 function startServer() {
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`Server is running on port ${PORT}`);
-        const status = email.getEmailStatus();
+        const status = mail.getEmailStatus();
         if (!status.configured) {
             console.warn('⚠️ Set EMAIL_USER + EMAIL_PASS in Render for verification emails.');
         }
     });
 }
 
-email.ensureInit()
+mail.ensureInit()
     .then(() => startServer())
     .catch((err) => {
         console.warn('✉️ Email init warning (starting anyway):', err.message);
