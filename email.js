@@ -115,15 +115,28 @@ function getEmailStatus() {
     };
 }
 
+function withTimeout(promise, ms, label) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+            setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+        })
+    ]);
+}
+
 async function sendMail(mailOptions) {
     await ensureInit();
     if (!transporter) {
         throw new Error('Email service is not configured. Contact the store administrator.');
     }
-    const info = await transporter.sendMail({
-        ...mailOptions,
-        from: mailOptions.from || getFromAddress()
-    });
+    const info = await withTimeout(
+        transporter.sendMail({
+            ...mailOptions,
+            from: mailOptions.from || getFromAddress()
+        }),
+        12000,
+        'SMTP send'
+    );
     const previewUrl = nodemailer.getTestMessageUrl(info);
     if (previewUrl) {
         console.log(`\n✉️ [Dev preview — not delivered to inbox]: ${previewUrl}\n`);

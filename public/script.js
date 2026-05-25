@@ -550,6 +550,41 @@ document.getElementById('checkout-btn').addEventListener('click', () => {
   window.location.href = 'checkout.html';
 });
 
+// ===== API helper (clear errors instead of generic "Network error") =====
+async function apiPost(url, body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 45000);
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'include',
+      signal: controller.signal
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out. The server may be waking up — wait 30s and try again.');
+    }
+    throw new Error('Cannot reach server. Check your connection or try again in a moment.');
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let data = {};
+  const text = await res.text();
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(res.ok ? 'Invalid server response.' : `Server error (${res.status}). Try again.`);
+    }
+  }
+  return { res, data };
+}
+
 // ===== USER AUTH =====
 let currentUser = null;
 let pendingCheckout = false;
@@ -679,13 +714,7 @@ document.getElementById('auth-login-form').addEventListener('submit', async (e) 
   const password = document.getElementById('auth-login-password').value;
 
   try {
-    const res = await fetch('/api/user/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-      credentials: 'include'
-    });
-    const data = await res.json();
+    const { res, data } = await apiPost('/api/user/login', { email, password });
     if (res.ok && data.success) {
       currentUser = data.user;
       updateUserUI();
@@ -701,7 +730,7 @@ document.getElementById('auth-login-form').addEventListener('submit', async (e) 
       if (data.needsVerification) showAuthView('register');
     }
   } catch (err) {
-    errorEl.textContent = 'Network error. Please try again.';
+    errorEl.textContent = err.message || 'Something went wrong. Please try again.';
     errorEl.classList.add('visible');
   } finally {
     btn.disabled = false;
@@ -723,13 +752,7 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
   const password = document.getElementById('auth-reg-password').value;
 
   try {
-    const res = await fetch('/api/user/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password }),
-      credentials: 'include'
-    });
-    const data = await res.json();
+    const { res, data } = await apiPost('/api/user/register', { name, email, password });
     if (res.ok && data.requiresVerification) {
       document.getElementById('auth-otp-instructions').textContent =
         `Enter the 6-digit code sent to ${data.email || email}`;
@@ -757,7 +780,7 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
       errorEl.classList.add('visible');
     }
   } catch (err) {
-    errorEl.textContent = 'Network error. Please try again.';
+    errorEl.textContent = err.message || 'Something went wrong. Please try again.';
     errorEl.classList.add('visible');
   } finally {
     btn.disabled = false;
@@ -774,19 +797,15 @@ document.getElementById('auth-resend-otp').addEventListener('click', async () =>
   btn.textContent = 'Sending...';
 
   try {
-    const res = await fetch('/api/user/resend-otp', {
-      method: 'POST',
-      credentials: 'include'
-    });
-    const data = await res.json();
+    const { res, data } = await apiPost('/api/user/resend-otp');
     if (res.ok) {
       showToast(data.message || 'New code sent!');
     } else {
       errorEl.textContent = data.error || 'Could not resend code.';
       errorEl.classList.add('visible');
     }
-  } catch {
-    errorEl.textContent = 'Network error. Try again.';
+  } catch (err) {
+    errorEl.textContent = err.message || 'Could not resend. Try again.';
     errorEl.classList.add('visible');
   } finally {
     btn.disabled = false;
@@ -812,13 +831,7 @@ document.getElementById('auth-otp-form').addEventListener('submit', async (e) =>
   const code = document.getElementById('auth-otp-code').value.trim();
 
   try {
-    const res = await fetch('/api/user/verify-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-      credentials: 'include'
-    });
-    const data = await res.json();
+    const { res, data } = await apiPost('/api/user/verify-otp', { code });
     if (res.ok && data.success) {
       currentUser = data.user;
       updateUserUI();
@@ -833,7 +846,7 @@ document.getElementById('auth-otp-form').addEventListener('submit', async (e) =>
       errorEl.classList.add('visible');
     }
   } catch (err) {
-    errorEl.textContent = 'Network error. Please try again.';
+    errorEl.textContent = err.message || 'Verification failed. Try again.';
     errorEl.classList.add('visible');
   } finally {
     btn.disabled = false;

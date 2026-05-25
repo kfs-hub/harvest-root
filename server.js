@@ -206,7 +206,7 @@ app.post('/api/user/register', loginRateLimit('user-register'), (req, res) => {
     const emailNorm = email.toLowerCase().trim();
     const nameTrim = name.trim();
 
-    db.get('SELECT id FROM users WHERE email = ?', [emailNorm], async (err, existing) => {
+    db.get('SELECT id FROM users WHERE email = ?', [emailNorm], (err, existing) => {
         if (err) {
             return res.status(500).json({ error: 'Server error.' });
         }
@@ -217,6 +217,9 @@ app.post('/api/user/register', loginRateLimit('user-register'), (req, res) => {
         const hash = bcrypt.hashSync(password, 10);
         const otp = String(Math.floor(100000 + Math.random() * 900000));
 
+        clearUserSession(req.session);
+        clearAdminSession(req.session);
+
         req.session.tempUser = {
             name: nameTrim,
             email: emailNorm,
@@ -225,24 +228,27 @@ app.post('/api/user/register', loginRateLimit('user-register'), (req, res) => {
             expiresAt: Date.now() + 10 * 60 * 1000
         };
 
-        clearUserSession(req.session);
-        clearAdminSession(req.session);
-
         const emailStatus = email.getEmailStatus();
         if (!emailStatus.configured && process.env.NODE_ENV === 'production') {
             delete req.session.tempUser;
             return res.status(503).json({
-                error: 'Email service is not set up on the server. Please contact Harvest Root support.',
+                error: 'Sign-up email is not configured yet. Please contact harvestroot2020@gmail.com.',
                 code: 'EMAIL_NOT_CONFIGURED'
             });
         }
 
-        try {
-            await email.sendOTPEmail(emailNorm, nameTrim, otp);
+        req.session.save((saveErr) => {
+            if (saveErr) {
+                console.error('Session save error:', saveErr.message);
+                delete req.session.tempUser;
+                return res.status(500).json({ error: 'Could not start signup. Please try again.' });
+            }
+
             clearAttempts(req._rateLimitKey);
             const message = emailStatus.configured
-                ? 'Verification code sent. Check your inbox and spam folder.'
-                : 'Dev mode: email was not sent to a real inbox. Check the server console for a preview link.';
+                ? 'Check your email for the verification code (also check spam).'
+                : 'Dev mode: check server logs for email preview link.';
+
             res.json({
                 success: true,
                 requiresVerification: true,
@@ -250,19 +256,17 @@ app.post('/api/user/register', loginRateLimit('user-register'), (req, res) => {
                 email: emailNorm,
                 emailMode: emailStatus.mode
             });
-        } catch (e) {
-            delete req.session.tempUser;
-            console.error('OTP email error:', e.message);
-            res.status(500).json({
-                error: 'Could not send verification email. Try again or use Resend code.',
-                detail: process.env.NODE_ENV !== 'production' ? e.message : undefined
+
+            // Send OTP in background so Render does not timeout the HTTP request
+            email.sendOTPEmail(emailNorm, nameTrim, otp).catch((e) => {
+                console.error('Background OTP email failed:', e.message);
             });
-        }
+        });
     });
 });
 
 // Resend verification OTP
-app.post('/api/user/resend-otp', loginRateLimit('resend-otp'), async (req, res) => {
+app.post('/api/user/resend-otp', loginRateLimit('resend-otp'), (req, res) => {
     const tempUser = req.session.tempUser;
 
     if (!tempUser) {
@@ -281,17 +285,21 @@ app.post('/api/user/resend-otp', loginRateLimit('resend-otp'), async (req, res) 
     tempUser.otp = otp;
     tempUser.expiresAt = Date.now() + 10 * 60 * 1000;
 
-    try {
-        await email.sendOTPEmail(tempUser.email, tempUser.name, otp);
+    req.session.save((saveErr) => {
+        if (saveErr) {
+            return res.status(500).json({ error: 'Session error. Please register again.' });
+        }
+
         res.json({
             success: true,
-            message: 'A new code was sent. Check inbox and spam.',
+            message: 'Sending a new code — check inbox and spam in 1–2 minutes.',
             email: tempUser.email
         });
-    } catch (e) {
-        console.error('Resend OTP error:', e.message);
-        res.status(500).json({ error: 'Failed to resend code. Please try again in a minute.' });
-    }
+
+        email.sendOTPEmail(tempUser.email, tempUser.name, otp).catch((e) => {
+            console.error('Background resend OTP failed:', e.message);
+        });
+    });
 });
 
 // Verify Registration OTP
