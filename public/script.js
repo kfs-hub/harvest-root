@@ -534,17 +534,18 @@ function initAnimations() {
 })();
 
 // ===== CHECKOUT =====
-document.getElementById('checkout-btn').addEventListener('click', () => {
+document.getElementById('checkout-btn').addEventListener('click', async () => {
   if (cart.length === 0) {
     alert('Please add items to cart before proceeding to checkout.');
     return;
   }
   // Require user login before checkout
-  if (!currentUser) {
+  const isAuthenticated = await isUserAuthenticated();
+  if (!isAuthenticated) {
     closeCart();
     pendingCheckout = true;
-    openAuthModal();
     showToast('Please sign in or create an account to place your order.');
+    await loginWithAuth0();
     return;
   }
   window.location.href = 'checkout.html';
@@ -674,16 +675,16 @@ async function loadUserOrders() {
   }
 }
 
-// User button click
-userBtn.addEventListener('click', () => {
-  if (currentUser) {
-    showAuthView('profile');
-    loadUserOrders();
-  } else {
-    showAuthView('login');
-  }
-  openAuthModal();
-});
+// User button click — DISABLED (Auth0 now handles this via auth0-config.js)
+// userBtn.addEventListener('click', () => {
+//   if (currentUser) {
+//     showAuthView('profile');
+//     loadUserOrders();
+//   } else {
+//     showAuthView('login');
+//   }
+//   openAuthModal();
+// });
 
 // Close modal
 authClose.addEventListener('click', closeAuthModal);
@@ -696,6 +697,12 @@ document.getElementById('show-register').addEventListener('click', (e) => {
   e.preventDefault();
   showAuthView('register');
 });
+/*
+========== OLD AUTH CODE (DISABLED - Auth0 handles authentication now) ==========
+This section contained old login/register/OTP verification code. 
+All authentication is now handled by Auth0 (see auth0-config.js)
+===============================================================================
+
 document.getElementById('show-login').addEventListener('click', (e) => {
   e.preventDefault();
   showAuthView('login');
@@ -865,7 +872,11 @@ document.getElementById('auth-logout-btn').addEventListener('click', async () =>
   showToast('You have been signed out.');
 });
 
+========== END OLD AUTH CODE ==========
+*/
+
 // ===== INIT =====
 fetchProducts();
 updateCart();
-checkUserSession();
+// Auth0 now handles user session (see auth0-config.js)
+// checkUserSession();
