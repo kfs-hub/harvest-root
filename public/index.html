@@ -572,11 +572,13 @@
         #user-btn { position: relative; }
 
         /* Auth Modal Overlay */
+        /* ===== OLD AUTH MODAL (HIDDEN - Auth0 handles auth now) ===== */
         .auth-overlay {
             position: fixed; inset: 0; z-index: 5000;
             background: rgba(0,0,0,0.45);
             backdrop-filter: blur(4px);
-            display: flex; align-items: center; justify-content: center;
+            display: none !important; /* HIDDEN - Auth0 now handles authentication */
+            align-items: center; justify-content: center;
             opacity: 0; visibility: hidden;
             transition: all 0.3s ease;
         }
