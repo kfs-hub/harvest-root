@@ -9,9 +9,6 @@ const bcrypt = require('bcryptjs');
 const db = require('./db');
 const multer = require('multer');
 const fs = require('fs');
-const jwt = require('jsonwebtoken');
-const https = require('https');
-
 const {
     clearAttempts,
     isValidEmail,
@@ -115,88 +112,6 @@ app.use(session({
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     }
 }));
-
-// ===== AUTH0 VERIFICATION MIDDLEWARE =====
-
-const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN || 'dev-mqhyf0wtkytr83ys.us.auth0.com';
-const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE || '';
-
-let jwksCache = null;
-let jwtVerifyOptions = {
-    algorithms: ['RS256']
-};
-
-async function getJWKS() {
-    if (jwksCache) return jwksCache;
-    return new Promise((resolve, reject) => {
-        https.get(`https://${AUTH0_DOMAIN}/.well-known/jwks.json`, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    jwksCache = JSON.parse(data);
-                    resolve(jwksCache);
-                } catch (e) {
-                    reject(e);
-                }
-            });
-        }).on('error', reject);
-    });
-}
-
-function getSigningKey(kid) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const jwks = await getJWKS();
-            const key = jwks.keys.find(k => k.kid === kid);
-            if (!key) return reject(new Error('Key not found'));
-            const crypto = require('crypto');
-            const publicKey = crypto.createPublicKey({
-                key: {
-                    kty: key.kty,
-                    n: key.n,
-                    e: key.e
-                },
-                format: 'jwk'
-            });
-            resolve(publicKey.export({ format: 'pem', type: 'spki' }));
-        } catch (e) {
-            reject(e);
-        }
-    });
-}
-
-async function verifyAuth0Token(token) {
-    try {
-        const decoded = jwt.decode(token, { complete: true });
-        if (!decoded) throw new Error('Invalid token format');
-        
-        const signingKey = await getSigningKey(decoded.header.kid);
-        const verified = jwt.verify(token, signingKey, jwtVerifyOptions);
-        return verified;
-    } catch (err) {
-        throw new Error(`Token verification failed: ${err.message}`);
-    }
-}
-
-// Middleware to verify Auth0 token from Authorization header
-async function verifyAuth0Middleware(req, res, next) {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    
-    if (!token) {
-        return res.status(401).json({ error: 'Authorization token required.' });
-    }
-
-    try {
-        const decoded = await verifyAuth0Token(token);
-        req.user = decoded;
-        next();
-    } catch (err) {
-        console.error('Auth0 verification error:', err.message);
-        res.status(401).json({ error: 'Invalid or expired token.' });
-    }
-}
-
 const persistentDataDir = process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH || '/var/data';
 const usePersistentDisk = !!(process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH);
 
@@ -863,13 +778,51 @@ app.put('/api/admin/orders/:id/status', requireAdmin, (req, res) => {
     });
 });
 
-// Auth0 Configuration endpoint
-app.get('/api/auth0-config', (req, res) => {
-    res.json({
-        domain: AUTH0_DOMAIN,
-        clientId: process.env.AUTH0_CLIENT_ID || 'qFcV16FaCjfgAkbqTEqTeu6sKdgmSQyh',
-        configured: !!AUTH0_DOMAIN
-    });
+// ===== CLAUDE AI CHAT ROUTE =====
+const Anthropic = require('@anthropic-ai/sdk');
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const HARVEST_ROOT_SYSTEM_PROMPT = `You are Mara, a friendly and knowledgeable spice assistant for Harvest Root — a premium spice brand from Coorg, Karnataka, India. Harvest Root is a third-generation family venture that grows and sells handpicked, farm-fresh spices (black pepper, cloves, cardamom, cinnamon, and more) directly from their Western Ghats plantations. Spices are sun-dried, hand-sorted, and shipped fresh.
+
+Your role:
+- Help customers with spice recommendations, cooking tips, and product questions
+- Answer questions about orders, shipping, and the brand story
+- Keep replies warm, concise, and helpful (2-4 sentences max unless a recipe is asked for)
+- If asked about order status or account issues, kindly direct them to contact harvestroot2020@gmail.com or call +91 99013 65868
+- Do not make up product prices or stock — tell customers to check the shop section for live pricing
+- Always stay on-brand: natural, authentic, rooted in the traditions of Coorg`;
+
+app.post('/api/chat', async (req, res) => {
+    const { messages } = req.body;
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ error: 'Messages are required.' });
+    }
+
+    // Sanitise messages — only allow user/assistant roles and string content
+    const safeMessages = messages
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+        .slice(-20); // keep last 20 turns to avoid huge context
+
+    if (safeMessages.length === 0) {
+        return res.status(400).json({ error: 'No valid messages provided.' });
+    }
+
+    try {
+        const response = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1024,
+            system: HARVEST_ROOT_SYSTEM_PROMPT,
+            messages: safeMessages,
+        });
+
+        const reply = response.content.find(b => b.type === 'text')?.text || '';
+        res.json({ reply });
+    } catch (err) {
+        console.error('Claude API error:', err.message);
+        res.status(500).json({ error: 'Chat is temporarily unavailable. Please try again.' });
+    }
 });
 
 // Health check for Render / uptime monitors
@@ -910,10 +863,6 @@ function startServer() {
         const status = mail.getEmailStatus();
         if (!status.configured) {
             console.warn('⚠️ Set EMAIL_USER + EMAIL_PASS in Render for verification emails.');
-        }
-        console.log(`🔐 Auth0 Domain: ${AUTH0_DOMAIN}`);
-        if (!process.env.AUTH0_CLIENT_ID) {
-            console.warn('⚠️ AUTH0_CLIENT_ID not set. Auth0 SDK will use default client ID.');
         }
     });
 }
