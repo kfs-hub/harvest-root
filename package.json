@@ -1,26 +1,21 @@
 {
-  "name": "harvest-root",
+  "name": "hehe1",
   "version": "1.0.0",
-  "description": "Premium Coorg spices e-commerce — Harvest Root",
-  "main": "server.js",
+  "description": "",
+  "main": "script.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "change-password": "node change-password.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.24.0",
     "bcryptjs": "^3.0.3",
     "body-parser": "^2.2.2",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
-    "jsonwebtoken": "^9.0.2",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.8",
     "sqlite3": "^6.0.1"

@@ -1,6 +1,3 @@
-require('dotenv').config();
-
-const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -9,31 +6,16 @@ const bcrypt = require('bcryptjs');
 const db = require('./db');
 const multer = require('multer');
 const fs = require('fs');
-const jwt = require('jsonwebtoken');
-const https = require('https');
-
-const {
-    clearAttempts,
-    isValidEmail,
-    validatePassword,
-    clearUserSession,
-    clearAdminSession,
-    establishAdminSession,
-    establishUserSession,
-    requireAdmin,
-    requireUser,
-    createRequireVerifiedUser,
-    loginRateLimit
-} = require('./auth');
-
-const requireVerifiedUser = createRequireVerifiedUser(db);
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         let uploadDir = path.join(__dirname, 'public', 'images');
         const persistentDataDir = process.env.DATA_DIR || '/var/data';
-        const usePersistentDisk = !!(process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH);
+        const usePersistentDisk = process.env.NODE_ENV === 'production'
+            || process.env.RENDER
+            || process.env.RENDER_SERVICE_ID
+            || process.env.DATA_DIR;
         if (usePersistentDisk) {
             const prodDir = path.join(persistentDataDir, 'images');
             try {
@@ -71,7 +53,78 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
-const mail = require('./email');
+// ===== EMAIL / OTP VERIFICATION CONFIG =====
+const nodemailer = require('nodemailer');
+
+const emailUser = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim() : '';
+const emailPass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.trim() : '';
+const emailService = process.env.EMAIL_SERVICE ? process.env.EMAIL_SERVICE.trim() : 'gmail';
+
+let transporter;
+if (emailUser && emailPass) {
+    // Production SMTP
+    transporter = nodemailer.createTransport({
+        service: emailService,
+        auth: {
+            user: emailUser,
+            pass: emailPass
+        }
+    });
+
+    transporter.verify()
+        .then(() => console.log('✉️ SMTP transporter verified.'))
+        .catch(err => console.error('✉️ SMTP transporter verification failed:', err.message));
+} else {
+    // Development fallback using Ethereal Fake SMTP
+    nodemailer.createTestAccount().then(account => {
+        transporter = nodemailer.createTransport({
+            host: account.smtp.host,
+            port: account.smtp.port,
+            secure: account.smtp.secure,
+            auth: {
+                user: account.user,
+                pass: account.pass
+            }
+        });
+        console.log('✉️ Dev Ethereal SMTP initialized. Emails will log in console.');
+    }).catch(err => {
+        console.error('Failed to initialize Dev SMTP:', err.message);
+    });
+}
+
+async function sendOTPEmail(toEmail, toName, otpCode) {
+    const mailOptions = {
+        from: `"Harvest Root" <${emailUser || 'no-reply@harvestroot.com'}>`,
+        to: toEmail,
+        subject: `${otpCode} is your Harvest Root verification code`,
+        html: `
+            <div style="font-family: 'Inter', sans-serif; max-width: 500px; margin: 0 auto; padding: 2rem; border: 1px solid #f0eae1; border-radius: 12px; background-color: #fdfcf7;">
+                <div style="text-align: center; margin-bottom: 1.5rem;">
+                    <h2 style="font-family: 'Playfair Display', serif; color: #2d5a3d; margin: 0; font-size: 1.8rem;">Harvest Root</h2>
+                    <p style="color: #8c7e6c; font-size: 0.85rem; margin-top: 0.25rem;">Pure Organic Spices from Coorg</p>
+                </div>
+                <h3 style="font-family: 'Playfair Display', serif; color: #2c2420; text-align: center; font-size: 1.3rem;">Verify your email address</h3>
+                <p style="color: #554a42; font-size: 0.95rem; line-height: 1.5;">Hi ${toName},</p>
+                <p style="color: #554a42; font-size: 0.95rem; line-height: 1.5;">Thank you for creating an account with Harvest Root. Please use the following 6-digit verification code to complete your signup. This code is valid for 10 minutes.</p>
+                <div style="text-align: center; margin: 2rem 0;">
+                    <span style="font-size: 2.2rem; font-weight: 700; letter-spacing: 6px; color: #2d5a3d; background: #f0eae1; padding: 0.75rem 2rem; border-radius: 8px; border: 1px dashed #d1c7bd; display: inline-block;">${otpCode}</span>
+                </div>
+                <p style="color: #8c7e6c; font-size: 0.8rem; line-height: 1.4; text-align: center;">If you didn't request this code, you can safely ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #f0eae1; margin: 2rem 0;">
+                <p style="color: #8c7e6c; font-size: 0.8rem; text-align: center; margin: 0;">© 2026 Harvest Root. Coorg Plantation, Karnataka, India.</p>
+            </div>
+        `
+    };
+
+    if (!transporter) {
+        throw new Error('Email transporter not ready');
+    }
+    const info = await transporter.sendMail(mailOptions);
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    if (previewUrl) {
+        console.log(`\n✉️ [Test Email Preview Link]: ${previewUrl}\n`);
+    }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -85,120 +138,22 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
-function resolveSessionSecret() {
-    if (process.env.SESSION_SECRET?.trim()) {
-        return process.env.SESSION_SECRET.trim();
-    }
-    if (process.env.RENDER || process.env.NODE_ENV === 'production') {
-        console.error('⚠️ SESSION_SECRET is not set in Render Environment.');
-        console.error('   Add a long random string (e.g. openssl rand -hex 32) and redeploy.');
-        // Stable fallback per service so deploy succeeds; replace with SESSION_SECRET in dashboard
-        return crypto.createHash('sha256')
-            .update(`harvest-root:${process.env.RENDER_SERVICE_ID || 'render'}:set-session-secret`)
-            .digest('hex');
-    }
-    console.warn('⚠️ Using dev SESSION_SECRET — set SESSION_SECRET in .env for production.');
-    return 'harvest-root-dev-only-secret';
-}
-
-const sessionSecret = resolveSessionSecret();
-
 app.use(session({
-    name: 'hr.sid',
-    secret: sessionSecret,
+    secret: process.env.SESSION_SECRET || 'harvest-root-secret-key-change-in-production',
     resave: false,
     saveUninitialized: false,
     cookie: {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
 }));
-
-// ===== AUTH0 VERIFICATION MIDDLEWARE =====
-
-const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN || 'dev-mqhyf0wtkytr83ys.us.auth0.com';
-const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE || '';
-
-let jwksCache = null;
-let jwtVerifyOptions = {
-    algorithms: ['RS256']
-};
-
-async function getJWKS() {
-    if (jwksCache) return jwksCache;
-    return new Promise((resolve, reject) => {
-        https.get(`https://${AUTH0_DOMAIN}/.well-known/jwks.json`, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    jwksCache = JSON.parse(data);
-                    resolve(jwksCache);
-                } catch (e) {
-                    reject(e);
-                }
-            });
-        }).on('error', reject);
-    });
-}
-
-function getSigningKey(kid) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const jwks = await getJWKS();
-            const key = jwks.keys.find(k => k.kid === kid);
-            if (!key) return reject(new Error('Key not found'));
-            const crypto = require('crypto');
-            const publicKey = crypto.createPublicKey({
-                key: {
-                    kty: key.kty,
-                    n: key.n,
-                    e: key.e
-                },
-                format: 'jwk'
-            });
-            resolve(publicKey.export({ format: 'pem', type: 'spki' }));
-        } catch (e) {
-            reject(e);
-        }
-    });
-}
-
-async function verifyAuth0Token(token) {
-    try {
-        const decoded = jwt.decode(token, { complete: true });
-        if (!decoded) throw new Error('Invalid token format');
-        
-        const signingKey = await getSigningKey(decoded.header.kid);
-        const verified = jwt.verify(token, signingKey, jwtVerifyOptions);
-        return verified;
-    } catch (err) {
-        throw new Error(`Token verification failed: ${err.message}`);
-    }
-}
-
-// Middleware to verify Auth0 token from Authorization header
-async function verifyAuth0Middleware(req, res, next) {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    
-    if (!token) {
-        return res.status(401).json({ error: 'Authorization token required.' });
-    }
-
-    try {
-        const decoded = await verifyAuth0Token(token);
-        req.user = decoded;
-        next();
-    } catch (err) {
-        console.error('Auth0 verification error:', err.message);
-        res.status(401).json({ error: 'Invalid or expired token.' });
-    }
-}
-
-const persistentDataDir = process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH || '/var/data';
-const usePersistentDisk = !!(process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH);
+const persistentDataDir = process.env.DATA_DIR || '/var/data';
+const usePersistentDisk = process.env.NODE_ENV === 'production'
+    || process.env.RENDER
+    || process.env.RENDER_SERVICE_ID
+    || process.env.DATA_DIR;
 
 // Serve uploaded images from persistent disk (if available)
 if (usePersistentDisk) {
@@ -215,16 +170,25 @@ if (usePersistentDisk) {
 // Always serve public folder as fallback
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ===== ADMIN AUTH ROUTES =====
+// Auth middleware — protects admin API routes
+function requireAuth(req, res, next) {
+    if (req.session && req.session.adminId) {
+        return next();
+    }
+    return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+}
 
-app.post('/api/auth/login', loginRateLimit('admin-login'), (req, res) => {
+// ===== AUTH ROUTES =====
+
+// Login
+app.post('/api/auth/login', (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
         return res.status(400).json({ error: 'Username and password are required.' });
     }
 
-    db.get('SELECT * FROM admins WHERE username = ?', [username.trim()], (err, admin) => {
+    db.get('SELECT * FROM admins WHERE username = ?', [username], (err, admin) => {
         if (err) {
             console.error('Login DB error:', err.message);
             return res.status(500).json({ error: 'Server error.' });
@@ -235,27 +199,27 @@ app.post('/api/auth/login', loginRateLimit('admin-login'), (req, res) => {
 
         bcrypt.compare(password, admin.password_hash, (err, match) => {
             if (err) {
+                console.error('Bcrypt error:', err.message);
                 return res.status(500).json({ error: 'Server error.' });
             }
             if (!match) {
                 return res.status(401).json({ error: 'Invalid username or password.' });
             }
 
-            clearAttempts(req._rateLimitKey);
-            establishAdminSession(req, admin, (regErr) => {
-                if (regErr) {
-                    return res.status(500).json({ error: 'Failed to establish session.' });
-                }
-                res.json({ success: true, message: 'Login successful.', username: admin.username });
-            });
+            req.session.adminId = admin.id;
+            req.session.adminUsername = admin.username;
+            res.json({ success: true, message: 'Login successful.', username: admin.username });
         });
     });
 });
 
+// Logout
 app.post('/api/auth/logout', (req, res) => {
-    clearAdminSession(req.session);
-    req.session.save((err) => {
-        if (err) return res.status(500).json({ error: 'Failed to logout.' });
+    req.session.destroy((err) => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to logout.' });
+        }
+        res.clearCookie('connect.sid');
         res.json({ success: true, message: 'Logged out.' });
     });
 });
@@ -270,28 +234,19 @@ app.get('/api/auth/check', (req, res) => {
 
 // ===== USER (CUSTOMER) AUTH ROUTES =====
 
-// User Register (sends OTP — account created after verify-otp)
-app.post('/api/user/register', loginRateLimit('user-register'), (req, res) => {
-    const { name, email: userEmail, password } = req.body;
+// User Register (Initiates OTP sending)
+app.post('/api/user/register', (req, res) => {
+    const { name, email, password } = req.body;
 
-    if (!name || !userEmail || !password) {
+    if (!name || !email || !password) {
         return res.status(400).json({ error: 'Name, email, and password are required.' });
     }
-    const pwdError = validatePassword(password);
-    if (pwdError) {
-        return res.status(400).json({ error: pwdError });
-    }
-    if (!isValidEmail(userEmail)) {
-        return res.status(400).json({ error: 'Please enter a valid email address.' });
-    }
-    if (name.trim().length < 2) {
-        return res.status(400).json({ error: 'Name must be at least 2 characters.' });
+    if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters.' });
     }
 
-    const emailNorm = userEmail.toLowerCase().trim();
-    const nameTrim = name.trim();
-
-    db.get('SELECT id FROM users WHERE email = ?', [emailNorm], (err, existing) => {
+    // Check if email already exists
+    db.get('SELECT id FROM users WHERE email = ?', [email.toLowerCase()], async (err, existing) => {
         if (err) {
             return res.status(500).json({ error: 'Server error.' });
         }
@@ -300,90 +255,27 @@ app.post('/api/user/register', loginRateLimit('user-register'), (req, res) => {
         }
 
         const hash = bcrypt.hashSync(password, 10);
-        const otp = String(Math.floor(100000 + Math.random() * 900000));
 
-        clearUserSession(req.session);
-        clearAdminSession(req.session);
+        db.run('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
+            [name.trim(), email.toLowerCase().trim(), hash], function(err) {
+                if (err) {
+                    console.error('User registration DB error:', err.message);
+                    return res.status(500).json({ error: 'Failed to create account.' });
+                }
 
-        req.session.tempUser = {
-            name: nameTrim,
-            email: emailNorm,
-            password_hash: hash,
-            otp,
-            expiresAt: Date.now() + 10 * 60 * 1000
-        };
+                req.session.userId = this.lastID;
+                req.session.userName = name.trim();
+                req.session.userEmail = email.toLowerCase().trim();
 
-        const emailStatus = mail.getEmailStatus();
-        if (!emailStatus.configured && process.env.NODE_ENV === 'production') {
-            delete req.session.tempUser;
-            return res.status(503).json({
-                error: 'Sign-up email is not configured yet. Please contact harvestroot2020@gmail.com.',
-                code: 'EMAIL_NOT_CONFIGURED'
+                res.status(201).json({
+                    success: true,
+                    message: 'Account created successfully.',
+                    user: {
+                        name: name.trim(),
+                        email: email.toLowerCase().trim()
+                    }
+                });
             });
-        }
-
-        req.session.save((saveErr) => {
-            if (saveErr) {
-                console.error('Session save error:', saveErr.message);
-                delete req.session.tempUser;
-                return res.status(500).json({ error: 'Could not start signup. Please try again.' });
-            }
-
-            clearAttempts(req._rateLimitKey);
-            const message = emailStatus.configured
-                ? 'Check your email for the verification code (also check spam).'
-                : 'Dev mode: check server logs for email preview link.';
-
-            res.json({
-                success: true,
-                requiresVerification: true,
-                message,
-                email: emailNorm,
-                emailMode: emailStatus.mode
-            });
-
-            // Send OTP in background so Render does not timeout the HTTP request
-            mail.sendOTPEmail(emailNorm, nameTrim, otp).catch((e) => {
-                console.error('Background OTP email failed:', e.message);
-            });
-        });
-    });
-});
-
-// Resend verification OTP
-app.post('/api/user/resend-otp', loginRateLimit('resend-otp'), (req, res) => {
-    const tempUser = req.session.tempUser;
-
-    if (!tempUser) {
-        return res.status(400).json({ error: 'Signup session expired. Please register again.' });
-    }
-
-    const emailStatus = mail.getEmailStatus();
-    if (!emailStatus.configured && process.env.NODE_ENV === 'production') {
-        return res.status(503).json({
-            error: 'Email service is not configured on the server.',
-            code: 'EMAIL_NOT_CONFIGURED'
-        });
-    }
-
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
-    tempUser.otp = otp;
-    tempUser.expiresAt = Date.now() + 10 * 60 * 1000;
-
-    req.session.save((saveErr) => {
-        if (saveErr) {
-            return res.status(500).json({ error: 'Session error. Please register again.' });
-        }
-
-        res.json({
-            success: true,
-            message: 'Sending a new code — check inbox and spam in 1–2 minutes.',
-            email: tempUser.email
-        });
-
-        mail.sendOTPEmail(tempUser.email, tempUser.name, otp).catch((e) => {
-            console.error('Background resend OTP failed:', e.message);
-        });
     });
 });
 
@@ -401,43 +293,33 @@ app.post('/api/user/verify-otp', (req, res) => {
         return res.status(400).json({ error: 'Verification code expired. Please sign up again.' });
     }
 
-    const codeNorm = String(code || '').trim();
-    if (!/^\d{6}$/.test(codeNorm) || codeNorm !== tempUser.otp) {
+    if (code !== tempUser.otp) {
         return res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
     }
 
-    db.run('INSERT INTO users (name, email, password_hash, email_verified) VALUES (?, ?, ?, 1)',
+    // Insert user into database
+    db.run('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
         [tempUser.name, tempUser.email, tempUser.password_hash], function(err) {
             if (err) {
                 return res.status(500).json({ error: 'Failed to create account.' });
             }
-            const newUser = { id: this.lastID, name: tempUser.name, email: tempUser.email };
-            delete req.session.tempUser;
-            establishUserSession(req, newUser, (regErr) => {
-                if (regErr) {
-                    return res.status(500).json({ error: 'Account created but session failed. Please sign in.' });
-                }
-                res.status(201).json({
-                    success: true,
-                    message: 'Account verified & created!',
-                    user: { name: newUser.name, email: newUser.email, address: '' }
-                });
-            });
+            req.session.userId = this.lastID;
+            req.session.userName = tempUser.name;
+            req.session.userEmail = tempUser.email;
+            delete req.session.tempUser; // Clear temp user state
+            res.status(201).json({ success: true, message: 'Account verified & created!', user: { name: tempUser.name, email: tempUser.email } });
         });
 });
 
 // User Login
-app.post('/api/user/login', loginRateLimit('user-login'), (req, res) => {
-    const { email: userEmail, password } = req.body;
+app.post('/api/user/login', (req, res) => {
+    const { email, password } = req.body;
 
-    if (!userEmail || !password) {
+    if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required.' });
     }
-    if (!isValidEmail(userEmail)) {
-        return res.status(400).json({ error: 'Please enter a valid email address.' });
-    }
 
-    db.get('SELECT * FROM users WHERE email = ?', [userEmail.toLowerCase().trim()], (err, user) => {
+    db.get('SELECT * FROM users WHERE email = ?', [email.toLowerCase()], (err, user) => {
         if (err) {
             return res.status(500).json({ error: 'Server error.' });
         }
@@ -449,31 +331,21 @@ app.post('/api/user/login', loginRateLimit('user-login'), (req, res) => {
         if (!match) {
             return res.status(401).json({ error: 'Invalid email or password.' });
         }
-        if (!user.email_verified) {
-            return res.status(403).json({
-                error: 'Email not verified. Please complete signup verification.',
-                needsVerification: true
-            });
-        }
 
-        clearAttempts(req._rateLimitKey);
-        establishUserSession(req, user, (regErr) => {
-            if (regErr) {
-                return res.status(500).json({ error: 'Failed to establish session.' });
-            }
-            res.json({
-                success: true,
-                user: { name: user.name, email: user.email, address: user.address || '' }
-            });
-        });
+        req.session.userId = user.id;
+        req.session.userName = user.name;
+        req.session.userEmail = user.email;
+        res.json({ success: true, user: { name: user.name, email: user.email, address: user.address || '' } });
     });
 });
 
 // User Logout
 app.post('/api/user/logout', (req, res) => {
-    clearUserSession(req.session);
-    req.session.save((err) => {
-        if (err) return res.status(500).json({ error: 'Failed to logout.' });
+    req.session.destroy((err) => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to logout.' });
+        }
+        res.clearCookie('connect.sid');
         res.json({ success: true });
     });
 });
@@ -481,13 +353,9 @@ app.post('/api/user/logout', (req, res) => {
 // User Check Session
 app.get('/api/user/check', (req, res) => {
     if (req.session && req.session.userId) {
-        db.get('SELECT name, email, address, email_verified FROM users WHERE id = ?', [req.session.userId], (err, user) => {
+        db.get('SELECT name, email, address FROM users WHERE id = ?', [req.session.userId], (err, user) => {
             if (err || !user) {
-                clearUserSession(req.session);
                 return res.json({ authenticated: false });
-            }
-            if (!user.email_verified) {
-                return res.json({ authenticated: false, needsVerification: true });
             }
             res.json({ authenticated: true, user: { name: user.name, email: user.email, address: user.address || '' } });
         });
@@ -496,43 +364,11 @@ app.get('/api/user/check', (req, res) => {
     }
 });
 
-// User order history (by email)
-app.get('/api/user/orders', requireVerifiedUser, (req, res) => {
-
-    db.get('SELECT email FROM users WHERE id = ?', [req.session.userId], (err, user) => {
-        if (err || !user) {
-            return res.status(500).json({ error: 'Failed to load orders.' });
-        }
-
-        const sql = `
-            SELECT o.id, o.total_amount, o.status, o.created_at,
-                   COALESCE(json_group_array(json_object(
-                       'product_name', oi.product_name,
-                       'quantity', oi.quantity,
-                       'price', oi.price
-                   )), '[]') as items
-            FROM orders o
-            LEFT JOIN order_items oi ON o.id = oi.order_id
-            WHERE o.customer_email = ?
-            GROUP BY o.id
-            ORDER BY o.created_at DESC
-        `;
-
-        db.all(sql, [user.email], (err, rows) => {
-            if (err) {
-                return res.status(500).json({ error: 'Failed to fetch orders.' });
-            }
-            const orders = rows.map(row => ({
-                ...row,
-                items: JSON.parse(row.items || '[]')
-            }));
-            res.json({ orders });
-        });
-    });
-});
-
 // User Update Profile (address)
-app.put('/api/user/profile', requireVerifiedUser, (req, res) => {
+app.put('/api/user/profile', (req, res) => {
+    if (!req.session || !req.session.userId) {
+        return res.status(401).json({ error: 'Please log in.' });
+    }
     const { address } = req.body;
     db.run('UPDATE users SET address = ? WHERE id = ?', [address || '', req.session.userId], function(err) {
         if (err) {
@@ -546,19 +382,14 @@ app.put('/api/user/profile', requireVerifiedUser, (req, res) => {
 
 // 1. Contact Form Submission
 app.post('/api/contact', (req, res) => {
-    const { name, email, message, inquiry } = req.body;
+    const { name, email, message } = req.body;
     
     if (!name || !email || !message) {
         return res.status(400).json({ error: 'Name, email, and message are required.' });
     }
 
-    const inquiryType = (inquiry || 'General').trim().slice(0, 50);
-    const fullMessage = inquiryType !== 'General'
-        ? `[${inquiryType}] ${message}`
-        : message;
-
-    const sql = `INSERT INTO contacts (name, email, inquiry, message) VALUES (?, ?, ?, ?)`;
-    db.run(sql, [name, email, inquiryType, fullMessage], function(err) {
+    const sql = `INSERT INTO contacts (name, email, message) VALUES (?, ?, ?)`;
+    db.run(sql, [name, email, message], function(err) {
         if (err) {
             console.error('Error saving contact:', err.message);
             return res.status(500).json({ error: 'Failed to save contact message.' });
@@ -567,101 +398,43 @@ app.post('/api/contact', (req, res) => {
     });
 });
 
-// Validate cart stock before checkout
-function validateCartStock(cartItems, callback) {
-    const ids = [...new Set(cartItems.map(i => i.id))];
-    if (ids.length === 0) return callback(null, []);
-
-    const placeholders = ids.map(() => '?').join(',');
-    db.all(`SELECT id, name, price, stock FROM products WHERE id IN (${placeholders})`, ids, (err, rows) => {
-        if (err) return callback(err);
-        const byId = Object.fromEntries(rows.map(r => [r.id, r]));
-        for (const item of cartItems) {
-            const p = byId[item.id];
-            const qty = parseInt(item.qty, 10);
-            if (!p) return callback(null, { error: `"${item.name}" is no longer available.` });
-            if (!qty || qty < 1) return callback(null, { error: 'Invalid quantity in cart.' });
-            if (p.stock < qty) {
-                const msg = p.stock === 0
-                    ? `"${p.name}" is out of stock.`
-                    : `Only ${p.stock} left in stock for "${p.name}".`;
-                return callback(null, { error: msg });
-            }
-        }
-        callback(null, null);
-    });
-}
-
-function processOrderItems(orderId, cartItems, index, done) {
-    if (index >= cartItems.length) {
-        return db.run('COMMIT', done);
-    }
-    const item = cartItems[index];
-    const qty = parseInt(item.qty, 10);
-    db.run(
-        `INSERT INTO order_items (order_id, product_id, product_name, quantity, price) VALUES (?, ?, ?, ?, ?)`,
-        [orderId, item.id, item.name, qty, item.price],
-        (err) => {
-            if (err) return done(err);
-            db.run(
-                `UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?`,
-                [qty, item.id, qty],
-                function(updateErr) {
-                    if (updateErr || this.changes === 0) {
-                        return done(new Error(`STOCK:${item.name}`));
-                    }
-                    processOrderItems(orderId, cartItems, index + 1, done);
-                }
-            );
-        }
-    );
-}
-
-// Checkout / Create Order (requires verified customer + stock check)
-app.post('/api/orders', requireVerifiedUser, (req, res) => {
+// 2. Checkout / Create Order
+app.post('/api/orders', (req, res) => {
     const { customerName, customerEmail, customerAddress, cartItems, totalAmount } = req.body;
 
     if (!customerName || !customerEmail || !customerAddress || !cartItems || cartItems.length === 0) {
         return res.status(400).json({ error: 'Incomplete order details.' });
     }
 
-    if (req.session.userEmail && customerEmail.toLowerCase().trim() !== req.session.userEmail) {
-        return res.status(403).json({ error: 'Order email must match your account email.' });
-    }
+    db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
 
-    validateCartStock(cartItems, (stockErr, stockMsg) => {
-        if (stockErr) {
-            return res.status(500).json({ error: 'Failed to validate inventory.' });
-        }
-        if (stockMsg) {
-            return res.status(400).json({ error: stockMsg.error });
-        }
+        const insertOrderSql = `INSERT INTO orders (customer_name, customer_email, customer_address, total_amount) VALUES (?, ?, ?, ?)`;
+        db.run(insertOrderSql, [customerName, customerEmail, customerAddress, totalAmount], function(err) {
+            if (err) {
+                db.run('ROLLBACK');
+                return res.status(500).json({ error: 'Failed to create order.' });
+            }
 
-        db.serialize(() => {
-            db.run('BEGIN TRANSACTION');
-            db.run(
-                `INSERT INTO orders (customer_name, customer_email, customer_address, total_amount) VALUES (?, ?, ?, ?)`,
-                [customerName, customerEmail, customerAddress, totalAmount],
-                function(err) {
+            const orderId = this.lastID;
+            const insertItemSql = `INSERT INTO order_items (order_id, product_id, product_name, quantity, price) VALUES (?, ?, ?, ?, ?)`;
+            
+            const stmt = db.prepare(insertItemSql);
+            for (let item of cartItems) {
+                stmt.run([orderId, item.id, item.name, item.qty, item.price], (err) => {
                     if (err) {
-                        db.run('ROLLBACK');
-                        return res.status(500).json({ error: 'Failed to create order.' });
+                        console.error('Error inserting order item:', err.message);
                     }
+                });
+            }
+            stmt.finalize();
 
-                    const orderId = this.lastID;
-                    processOrderItems(orderId, cartItems, 0, (commitErr) => {
-                        if (commitErr) {
-                            db.run('ROLLBACK');
-                            const msg = String(commitErr.message || '').startsWith('STOCK:')
-                                ? `${commitErr.message.replace('STOCK:', '')} — insufficient stock. Please refresh your cart.`
-                                : 'Failed to complete order.';
-                            return res.status(400).json({ error: msg });
-                        }
-                        mail.sendOrderConfirmationEmail(orderId, customerName, customerEmail, cartItems, totalAmount);
-                        res.status(201).json({ success: true, message: 'Order placed successfully!', orderId });
-                    });
+            db.run('COMMIT', (err) => {
+                if (err) {
+                    return res.status(500).json({ error: 'Failed to commit order.' });
                 }
-            );
+                res.status(201).json({ success: true, message: 'Order placed successfully!', orderId: orderId });
+            });
         });
     });
 });
@@ -677,41 +450,30 @@ app.get('/api/products', (req, res) => {
     });
 });
 
-// 2.6. Admin: Update product price and/or stock
-app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
+// 2.6. Admin: Update product price
+app.put('/api/admin/products/:id', requireAuth, (req, res) => {
     const productId = req.params.id;
-    const { price, stock } = req.body;
+    const { price } = req.body;
 
-    if (price === undefined && stock === undefined) {
-        return res.status(400).json({ error: 'Provide price and/or stock to update.' });
-    }
-    if (price !== undefined && (isNaN(price) || price < 0)) {
+    if (price === undefined || isNaN(price) || price < 0) {
         return res.status(400).json({ error: 'Valid price is required.' });
     }
-    if (stock !== undefined && (isNaN(stock) || stock < 0 || !Number.isInteger(Number(stock)))) {
-        return res.status(400).json({ error: 'Stock must be a non-negative whole number.' });
-    }
 
-    const updates = [];
-    const params = [];
-    if (price !== undefined) { updates.push('price = ?'); params.push(price); }
-    if (stock !== undefined) { updates.push('stock = ?'); params.push(parseInt(stock, 10)); }
-    params.push(productId);
-
-    db.run(`UPDATE products SET ${updates.join(', ')} WHERE id = ?`, params, function(err) {
+    db.run(`UPDATE products SET price = ? WHERE id = ?`, [price, productId], function(err) {
         if (err) {
-            return res.status(500).json({ error: 'Failed to update product.' });
+            console.error('Error updating product price:', err.message);
+            return res.status(500).json({ error: 'Failed to update product price.' });
         }
         if (this.changes === 0) {
             return res.status(404).json({ error: 'Product not found.' });
         }
-        res.json({ success: true, message: 'Product updated successfully.' });
+        res.json({ success: true, message: 'Product price updated successfully.' });
     });
 });
 
 // 2.7. Admin: Add new product
-app.post('/api/admin/products', requireAdmin, upload.single('photo'), (req, res) => {
-    const { name, origin, desc, price, unit, badge, stock } = req.body;
+app.post('/api/admin/products', requireAuth, upload.single('photo'), (req, res) => {
+    const { name, origin, desc, price, unit, badge } = req.body;
     
     if (!req.file) {
         return res.status(400).json({ error: 'Photo/image file is required.' });
@@ -728,16 +490,10 @@ app.post('/api/admin/products', requireAdmin, upload.single('photo'), (req, res)
         return res.status(400).json({ error: 'Valid price is required.' });
     }
 
-    const stockNum = stock !== undefined && stock !== '' ? parseInt(stock, 10) : 50;
-    if (isNaN(stockNum) || stockNum < 0) {
-        fs.unlink(req.file.path, () => {});
-        return res.status(400).json({ error: 'Valid stock quantity is required.' });
-    }
-
     const imagePath = `images/${req.file.filename}`;
 
-    const sql = `INSERT INTO products (name, origin, desc, price, unit, badge, image, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-    db.run(sql, [name, origin, desc, priceNum, unit, badge || '', imagePath, stockNum], function(err) {
+    const sql = `INSERT INTO products (name, origin, desc, price, unit, badge, image) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    db.run(sql, [name, origin, desc, priceNum, unit, badge || '', imagePath], function(err) {
         if (err) {
             console.error('Error adding product:', err.message);
             fs.unlink(req.file.path, () => {});
@@ -748,7 +504,7 @@ app.post('/api/admin/products', requireAdmin, upload.single('photo'), (req, res)
 });
 
 // 2.8. Admin: Delete product
-app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/products/:id', requireAuth, (req, res) => {
     const productId = req.params.id;
 
     db.get(`SELECT image FROM products WHERE id = ?`, [productId], (err, product) => {
@@ -780,7 +536,7 @@ app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
 });
 
 // 3. Admin: Get all contacts
-app.get('/api/admin/contacts', requireAdmin, (req, res) => {
+app.get('/api/admin/contacts', requireAuth, (req, res) => {
     db.all(`SELECT * FROM contacts ORDER BY created_at DESC`, [], (err, rows) => {
         if (err) {
             return res.status(500).json({ error: 'Failed to fetch contacts.' });
@@ -790,7 +546,7 @@ app.get('/api/admin/contacts', requireAdmin, (req, res) => {
 });
 
 // 4. Admin: Get all orders with items
-app.get('/api/admin/orders', requireAdmin, (req, res) => {
+app.get('/api/admin/orders', requireAuth, (req, res) => {
     const sql = `
         SELECT o.id, o.customer_name, o.customer_email, o.customer_address, o.total_amount, o.status, o.created_at,
                COALESCE(json_group_array(json_object(
@@ -820,107 +576,19 @@ app.get('/api/admin/orders', requireAdmin, (req, res) => {
     });
 });
 
-// 5. Admin: Update order status (restores stock when cancelled)
-app.put('/api/admin/orders/:id/status', requireAdmin, (req, res) => {
+// 5. Admin: Update order status
+app.put('/api/admin/orders/:id/status', requireAuth, (req, res) => {
     const orderId = req.params.id;
     const { status } = req.body;
-    const allowed = ['pending', 'completed', 'cancelled'];
-    if (!allowed.includes(status)) {
-        return res.status(400).json({ error: 'Invalid status.' });
-    }
-
-    db.get('SELECT status FROM orders WHERE id = ?', [orderId], (err, order) => {
-        if (err || !order) {
-            return res.status(404).json({ error: 'Order not found.' });
+    db.run(`UPDATE orders SET status = ? WHERE id = ?`, [status, orderId], function(err) {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to update order status.' });
         }
-
-        const restoreStock = status === 'cancelled' && order.status !== 'cancelled';
-
-        db.run(`UPDATE orders SET status = ? WHERE id = ?`, [status, orderId], function(updateErr) {
-            if (updateErr) {
-                return res.status(500).json({ error: 'Failed to update order status.' });
-            }
-
-            if (!restoreStock) {
-                return res.json({ success: true });
-            }
-
-            db.all('SELECT product_id, quantity FROM order_items WHERE order_id = ?', [orderId], (itemsErr, items) => {
-                if (itemsErr || !items.length) {
-                    return res.json({ success: true });
-                }
-                let done = 0;
-                items.forEach(item => {
-                    db.run('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id], () => {
-                        done++;
-                        if (done === items.length) {
-                            res.json({ success: true, stockRestored: true });
-                        }
-                    });
-                });
-            });
-        });
+        res.json({ success: true });
     });
 });
 
-// Auth0 Configuration endpoint
-app.get('/api/auth0-config', (req, res) => {
-    res.json({
-        domain: AUTH0_DOMAIN,
-        clientId: process.env.AUTH0_CLIENT_ID || 'qFcV16FaCjfgAkbqTEqTeu6sKdgmSQyh',
-        configured: !!AUTH0_DOMAIN
-    });
+// Start Server
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
-
-// Health check for Render / uptime monitors
-app.get('/api/health', (req, res) => {
-    res.json({
-        ok: true,
-        email: mail.getEmailStatus(),
-        sessionSecretSet: !!process.env.SESSION_SECRET
-    });
-});
-
-// Catch-all: API 404 JSON, unknown pages → 404.html
-app.use((req, res) => {
-    if (req.path.startsWith('/api/')) {
-        return res.status(404).json({ error: 'API endpoint not found' });
-    }
-    if (req.method === 'GET') {
-        const filePath = path.join(__dirname, 'public', '404.html');
-        if (fs.existsSync(filePath)) {
-            return res.status(404).sendFile(filePath);
-        }
-    }
-    res.status(404).json({ error: 'Not found' });
-});
-
-// Prevent crashes from becoming 502 on Render
-app.use((err, req, res, next) => {
-    console.error('Unhandled error:', err.message);
-    if (!res.headersSent) {
-        res.status(500).json({ error: 'Server error. Please try again.' });
-    }
-});
-
-// Start server — email init must not block deploy (SMTP verify can timeout on Render)
-function startServer() {
-    app.listen(PORT, '0.0.0.0', () => {
-        console.log(`Server is running on port ${PORT}`);
-        const status = mail.getEmailStatus();
-        if (!status.configured) {
-            console.warn('⚠️ Set EMAIL_USER + EMAIL_PASS in Render for verification emails.');
-        }
-        console.log(`🔐 Auth0 Domain: ${AUTH0_DOMAIN}`);
-        if (!process.env.AUTH0_CLIENT_ID) {
-            console.warn('⚠️ AUTH0_CLIENT_ID not set. Auth0 SDK will use default client ID.');
-        }
-    });
-}
-
-mail.ensureInit()
-    .then(() => startServer())
-    .catch((err) => {
-        console.warn('✉️ Email init warning (starting anyway):', err.message);
-        startServer();
-    });

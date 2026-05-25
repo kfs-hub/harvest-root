@@ -8,8 +8,11 @@ const localDbPath = path.resolve(__dirname, 'database.sqlite');
 const persistentDataDir = process.env.DB_PATH ? path.dirname(process.env.DB_PATH) : (process.env.DATA_DIR || '/var/data');
 let dbPath = localDbPath;
 
-// Only use persistent disk when explicitly mounted (Render disk → set DATA_DIR or RENDER_DISK_MOUNT_PATH)
-const usePersistentDisk = !!(process.env.DB_PATH || process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH);
+const usePersistentDisk = process.env.DB_PATH
+    || process.env.DATA_DIR
+    || process.env.NODE_ENV === 'production'
+    || process.env.RENDER
+    || process.env.RENDER_SERVICE_ID;
 
 if (usePersistentDisk) {
     const persistentDbPath = process.env.DB_PATH
@@ -46,17 +49,9 @@ function initDb() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             email TEXT NOT NULL,
-            inquiry TEXT DEFAULT 'General',
             message TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
-
-        // Migrate older databases missing inquiry column
-        db.run(`ALTER TABLE contacts ADD COLUMN inquiry TEXT DEFAULT 'General'`, (err) => {
-            if (err && !String(err.message).includes('duplicate column')) {
-                // ignore — column already exists
-            }
-        });
 
         // Create orders table
         db.run(`CREATE TABLE IF NOT EXISTS orders (
@@ -89,31 +84,24 @@ function initDb() {
             price REAL NOT NULL,
             unit TEXT NOT NULL,
             badge TEXT,
-            image TEXT NOT NULL,
-            stock INTEGER NOT NULL DEFAULT 50
-        )`);
-
-        db.run(`ALTER TABLE products ADD COLUMN stock INTEGER NOT NULL DEFAULT 50`, (err) => {
-            if (!err) {
-                db.run(`UPDATE products SET stock = 50 WHERE stock IS NULL OR stock < 0`);
-            }
-        });
-
-        db.get(`SELECT COUNT(*) as count FROM products`, (err, row) => {
-            if (!err && row.count === 0) {
-                const initialProducts = [
-                    [1, "Black Pepper", "Coorg Estate", "Bold, aromatic Tellicherry-grade peppercorns. Sun-dried for maximum pungency.", 350, "250g", "Bestseller", "images/Black Pepper.png", 50],
-                    [2, "Cloves", "Coorg Hills", "Intensely fragrant whole cloves, hand-sorted for premium quality.", 420, "100g", "Premium", "images/Cloves.png", 40],
-                    [3, "Green Cardamom", "Western Ghats", "Plump, green pods bursting with sweet, floral aroma. Perfect for chai and desserts.", 580, "100g", "Popular", "images/Cardamom.png", 35],
-                    [4, "Cinnamon Sticks", "Coorg Plantation", "True Ceylon-style cinnamon with delicate sweetness. Rolled by hand.", 310, "100g", "", "images/Cinnamon Sticks.png", 45]
-                ];
-                const stmt = db.prepare(`INSERT INTO products (id, name, origin, desc, price, unit, badge, image, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-                for (let p of initialProducts) {
-                    stmt.run(p);
+            image TEXT NOT NULL
+        )`, () => {
+            db.get(`SELECT COUNT(*) as count FROM products`, (err, row) => {
+                if (!err && row.count === 0) {
+                    const initialProducts = [
+                        [1, "Black Pepper", "Coorg Estate", "Bold, aromatic Tellicherry-grade peppercorns. Sun-dried for maximum pungency.", 350, "250g", "Bestseller", "images/Black Pepper.png"],
+                        [2, "Cloves", "Coorg Hills", "Intensely fragrant whole cloves, hand-sorted for premium quality.", 420, "100g", "Premium", "images/Cloves.png"],
+                        [3, "Green Cardamom", "Western Ghats", "Plump, green pods bursting with sweet, floral aroma. Perfect for chai and desserts.", 580, "100g", "Popular", "images/Cardamom.png"],
+                        [4, "Cinnamon Sticks", "Coorg Plantation", "True Ceylon-style cinnamon with delicate sweetness. Rolled by hand.", 310, "100g", "", "images/Cinnamon Sticks.png"]
+                    ];
+                    const stmt = db.prepare(`INSERT INTO products (id, name, origin, desc, price, unit, badge, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+                    for (let p of initialProducts) {
+                        stmt.run(p);
+                    }
+                    stmt.finalize();
+                    console.log('Products table populated with initial catalog.');
                 }
-                stmt.finalize();
-                console.log('Products table populated with initial catalog.');
-            }
+            });
         });
 
         // Create admins table
@@ -144,15 +132,8 @@ function initDb() {
             email TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             address TEXT DEFAULT '',
-            email_verified INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`);
-
-        db.run(`ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0`, (err) => {
-            if (!err) {
-                db.run(`UPDATE users SET email_verified = 1 WHERE email_verified IS NULL OR email_verified = 0`);
-            }
-        });
 
         console.log('Database tables initialized.');
     });

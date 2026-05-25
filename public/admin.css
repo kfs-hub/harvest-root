@@ -250,11 +250,6 @@ body {
 .btn-submit-form { background: var(--green); color: var(--white); border: none; padding: 14px 32px; border-radius: 50px; font-weight: 600; font-family: var(--font-sans); cursor: pointer; transition: var(--transition); font-size: 0.95rem; }
 .btn-submit-form:hover { background: var(--green-light); transform: translateY(-2px); box-shadow: 0 6px 15px rgba(41, 83, 55, 0.2); }
 
-.stock-pill { font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
-.stock-pill.stock-ok { background: rgba(39, 174, 96, 0.15); color: var(--accent-emerald); }
-.stock-pill.stock-low { background: rgba(243, 156, 18, 0.2); color: var(--accent-amber); }
-.stock-pill.stock-out { background: rgba(192, 57, 43, 0.15); color: var(--red); }
-
 /* RESPONSIVE */
 @media(max-width: 1024px) {
     .order-card-body { grid-template-columns: 1fr; gap: 16px; }

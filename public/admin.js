@@ -306,7 +306,7 @@ function renderContacts() {
                     <div class="contact-person">
                         <div class="contact-avatar">${initials}</div>
                         <div>
-                            <div class="contact-name">${c.name}${c.inquiry && c.inquiry !== 'General' ? ` <span style="font-size:0.7rem;background:var(--accent-blue);color:#fff;padding:2px 8px;border-radius:4px;">${c.inquiry}</span>` : ''}</div>
+                            <div class="contact-name">${c.name}</div>
                             <div class="contact-email">${c.email}</div>
                         </div>
                     </div>
@@ -332,50 +332,35 @@ function renderProducts() {
         return;
     }
 
-    container.innerHTML = allProducts.map(p => {
-        const stock = parseInt(p.stock, 10) || 0;
-        const stockClass = stock === 0 ? 'stock-out' : stock <= 5 ? 'stock-low' : 'stock-ok';
-        return `
+    container.innerHTML = allProducts.map(p => `
         <div class="admin-product-card">
             <img src="../${p.image}" class="admin-product-img" alt="${p.name}" onerror="this.src='https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&q=80&w=400'">
             <div class="admin-product-info">
                 <div class="admin-product-name">${p.name}</div>
-                <div class="admin-product-meta">${p.origin} · ${p.unit} · <span class="stock-pill ${stockClass}">${stock} in stock</span></div>
+                <div class="admin-product-meta">${p.origin} · ${p.unit}</div>
                 <div class="admin-product-edit-group">
                     <div class="admin-product-input-wrapper">
                         <span class="admin-product-input-prefix">₹</span>
-                        <input type="number" id="price-input-${p.id}" class="admin-product-input" value="${p.price}" min="0" title="Price">
+                        <input type="number" id="price-input-${p.id}" class="admin-product-input" value="${p.price}" min="0">
                     </div>
-                    <div class="admin-product-input-wrapper">
-                        <span class="admin-product-input-prefix">#</span>
-                        <input type="number" id="stock-input-${p.id}" class="admin-product-input" value="${stock}" min="0" title="Stock">
-                    </div>
-                    <button class="btn-update-price" onclick="updateProduct(${p.id})">Save</button>
+                    <button class="btn-update-price" onclick="updateProductPrice(${p.id})">Update</button>
                     <button class="btn-delete-product" onclick="deleteProduct(${p.id})" title="Delete Product">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                     </button>
                 </div>
             </div>
         </div>
-    `;
-    }).join('');
+    `).join('');
 }
 
-// ===== UPDATE PRODUCT PRICE & STOCK =====
-async function updateProduct(id) {
-    const priceInput = document.getElementById(`price-input-${id}`);
-    const stockInput = document.getElementById(`stock-input-${id}`);
-    if (!priceInput || !stockInput) return;
-
-    const price = parseFloat(priceInput.value);
-    const stock = parseInt(stockInput.value, 10);
+// ===== UPDATE PRODUCT PRICE =====
+async function updateProductPrice(id) {
+    const input = document.getElementById(`price-input-${id}`);
+    if (!input) return;
+    const price = parseFloat(input.value);
 
     if (isNaN(price) || price < 0) {
         alert('Please enter a valid price.');
-        return;
-    }
-    if (isNaN(stock) || stock < 0) {
-        alert('Please enter a valid stock quantity.');
         return;
     }
 
@@ -383,22 +368,29 @@ async function updateProduct(id) {
         const res = await authFetch(`/api/admin/products/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ price, stock })
+            body: JSON.stringify({ price })
         });
         if (res.ok) {
+            const btn = input.parentElement.nextElementSibling;
+            const originalText = btn.textContent;
+            btn.textContent = '✓ Saved';
+            btn.style.background = 'var(--accent-emerald)';
+            btn.style.color = '#fff';
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.background = '';
+                btn.style.color = '';
+            }, 1500);
+            
+            // Quietly update local state price
             const prod = allProducts.find(p => p.id === id);
-            if (prod) {
-                prod.price = price;
-                prod.stock = stock;
-            }
-            renderProducts();
-            alert('Product updated.');
+            if (prod) prod.price = price;
         } else {
             const data = await res.json();
-            alert(data.error || 'Failed to update product');
+            alert(data.error || 'Failed to update price');
         }
     } catch (err) {
-        alert('Network error. Failed to update product.');
+        alert('Network error. Failed to update price.');
     }
 }
 

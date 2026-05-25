@@ -87,7 +87,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         placeBtn.textContent = 'Processing...';
 
         try {
-            const res = await fetch('/api/orders', {
+            const res = await fetch('api/orders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(orderData),
@@ -97,22 +97,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             const data = await res.json();
             
             if (res.ok) {
+                // Clear cart
                 localStorage.removeItem('harvestRootCart');
-                const orderIdEl = document.getElementById('success-order-id');
-                if (orderIdEl && data.orderId) {
-                    orderIdEl.textContent = `Your order number is #${data.orderId}.`;
-                }
+                
+                // Show success message
                 document.getElementById('checkout-content').style.display = 'none';
                 document.getElementById('success-message').style.display = 'block';
             } else {
-                if (res.status === 401 || res.status === 403) {
-                    window.location.href = '/';
-                    return;
-                }
-                alert(data.error || 'Order failed. Please try again.');
-                if (data.error && /stock|available/i.test(data.error)) {
-                    setTimeout(() => { window.location.href = '/#products'; }, 500);
-                }
+                alert(`Order failed: ${data.error || 'Please try again.'}`);
                 placeBtn.disabled = false;
                 placeBtn.textContent = 'Place Order';
             }
