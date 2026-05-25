@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="icon" href="images/harvest root logo.png" type="image/png">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -24,7 +25,6 @@
                 <li><a href="#story" class="nav-link">Our Story</a></li>
                 <li><a href="#products" class="nav-link">Shop</a></li>
                 <li><a href="#contact" class="nav-link">Contact</a></li>
-                <li><a href="admin.html" class="nav-link">Admin</a></li>
             </ul>
             <div class="nav-actions">
                 <button class="cart-btn" id="cart-btn" aria-label="Shopping Cart">
@@ -360,7 +360,7 @@
             <div class="footer-grid">
                 <div class="footer-brand">
                     <a href="#" class="nav-logo">
-                         <span class="logo-icon"> <img src="images\harvest root logo.png" alt="Company Logo" width="70"></span>
+                         <span class="logo-icon"> <img src="images/harvest root logo.png" alt="Company Logo" width="70"></span>
                         <span class="logo-text">Harvest Root</span>
                     </a>
                     <p class="footer-desc">Premium spices handpicked from the plantations of Coorg, delivered fresh to your doorstep.</p>
@@ -508,7 +508,7 @@
                     </div>
                     <div class="auth-field">
                         <label for="auth-reg-password">Password</label>
-                        <input type="password" id="auth-reg-password" placeholder="Min. 6 characters" required minlength="6">
+                        <input type="password" id="auth-reg-password" placeholder="Min. 8 chars, letter + number" required minlength="8">
                     </div>
                     <div class="auth-error" id="auth-register-error"></div>
                     <button type="submit" class="auth-btn" id="auth-register-btn">Create Account</button>
@@ -528,6 +528,8 @@
                     <div class="auth-error" id="auth-otp-error"></div>
                     <button type="submit" class="auth-btn" id="auth-otp-btn">Verify Code</button>
                 </form>
+                <p class="auth-otp-hint" id="auth-otp-hint">Didn't get the email? Check spam/junk, wait 2 minutes, then resend.</p>
+                <button type="button" class="auth-btn auth-btn-outline auth-resend-btn" id="auth-resend-otp">Resend code</button>
                 <p class="auth-switch"><a href="#" id="cancel-otp">Back to Sign Up</a></p>
             </div>
 
@@ -537,6 +539,12 @@
                     <div class="auth-avatar" id="auth-avatar">U</div>
                     <h3 class="auth-title" id="auth-profile-name">User</h3>
                     <p class="auth-subtitle" id="auth-profile-email">user@email.com</p>
+                </div>
+                <div class="auth-orders-section" id="auth-orders-section">
+                    <h4 class="auth-orders-title">My Orders</h4>
+                    <div id="auth-orders-list" class="auth-orders-list">
+                        <p class="auth-orders-empty">Loading orders…</p>
+                    </div>
                 </div>
                 <button class="auth-btn auth-btn-outline" id="auth-logout-btn">Sign Out</button>
             </div>
@@ -658,6 +666,11 @@
             color: var(--green); font-weight: 600;
             text-decoration: underline;
         }
+        .auth-otp-hint {
+            font-size: 0.78rem; color: var(--text-light);
+            text-align: center; line-height: 1.45; margin: 0.75rem 0 0.5rem;
+        }
+        .auth-resend-btn { margin-top: 0.25rem; font-size: 0.85rem; }
         .auth-profile-header {
             text-align: center; margin-bottom: 1.5rem;
         }
@@ -669,6 +682,30 @@
             margin: 0 auto 0.75rem;
             font-family: 'Playfair Display', serif;
         }
+        .auth-orders-section {
+            margin: 1.25rem 0 1rem;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        .auth-orders-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-light);
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+        .auth-orders-list { display: flex; flex-direction: column; gap: 0.6rem; }
+        .auth-order-card {
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--sand);
+            border-radius: 10px;
+            background: var(--bg);
+            font-size: 0.82rem;
+        }
+        .auth-order-card strong { color: var(--green); }
+        .auth-order-meta { color: var(--text-light); font-size: 0.75rem; margin-top: 0.25rem; }
+        .auth-orders-empty { color: var(--text-light); font-size: 0.85rem; text-align: center; }
         @media (max-width: 500px) {
             .auth-card { margin: 1rem; padding: 2rem 1.5rem; }
         }

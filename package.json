@@ -1,9 +1,12 @@
 {
-  "name": "hehe1",
+  "name": "harvest-root",
   "version": "1.0.0",
-  "description": "",
-  "main": "script.js",
+  "description": "Premium Coorg spices e-commerce — Harvest Root",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "change-password": "node change-password.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

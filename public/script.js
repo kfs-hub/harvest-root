@@ -8,6 +8,7 @@ async function fetchProducts() {
     const res = await fetch('/api/products');
     const data = await res.json();
     products = data.products || [];
+    syncCartWithCatalog();
     renderProducts();
   } catch (err) {
     console.error('Error fetching products:', err);
@@ -18,15 +19,38 @@ async function fetchProducts() {
   }
 }
 
+function getStock(p) {
+  return typeof p.stock === 'number' ? p.stock : parseInt(p.stock, 10) || 0;
+}
+
+function isInStock(p) {
+  return getStock(p) > 0;
+}
+
+function syncCartWithCatalog() {
+  cart = cart.map(item => {
+    const fresh = products.find(p => p.id === item.id);
+    if (!fresh) return null;
+    const stock = getStock(fresh);
+    return { ...item, ...fresh, stock, qty: Math.min(item.qty, stock) };
+  }).filter(Boolean);
+  updateCart();
+}
+
 // ===== RENDER PRODUCTS =====
 function renderProducts() {
   const grid = document.getElementById('products-grid');
   if (!grid) return;
-  grid.innerHTML = products.map((p, i) => `
-    <div class="product-card" data-animate="fade-up" data-delay="${i * 100}">
+  grid.innerHTML = products.map((p, i) => {
+    const stock = getStock(p);
+    const out = stock <= 0;
+    const low = stock > 0 && stock <= 5;
+    return `
+    <div class="product-card ${out ? 'out-of-stock' : ''}" data-animate="fade-up" data-delay="${i * 100}">
       <div class="product-image">
         <img src="${p.image}" alt="${p.name}" loading="lazy">
         ${p.badge ? `<span class="product-badge">${p.badge}</span>` : ''}
+        ${out ? '<span class="product-badge stock-badge">Out of stock</span>' : low ? `<span class="product-badge stock-badge low">Only ${stock} left</span>` : ''}
       </div>
       <div class="product-info">
         <h3 class="product-name">${p.name}</h3>
@@ -34,19 +58,36 @@ function renderProducts() {
         <p class="product-desc">${p.desc}</p>
         <div class="product-footer">
           <div class="product-price">&#8377;${p.price} <span>/ ${p.unit}</span></div>
-          <button class="add-to-cart-btn" data-id="${p.id}" onclick="addToCart(${p.id})">Add to Cart</button>
+          ${out
+            ? '<button class="add-to-cart-btn disabled" disabled>Out of Stock</button>'
+            : `<button class="add-to-cart-btn" data-id="${p.id}" onclick="addToCart(${p.id})">Add to Cart</button>`}
         </div>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
   initAnimations();
 }
 
 // ===== CART =====
 function addToCart(id) {
   const product = products.find(p => p.id === id);
+  if (!product) return;
+  const stock = getStock(product);
+  if (stock <= 0) {
+    showToast(`${product.name} is out of stock.`);
+    return;
+  }
   const existing = cart.find(item => item.id === id);
-  if (existing) { existing.qty++; } else { cart.push({ ...product, qty: 1 }); }
+  if (existing) {
+    if (existing.qty >= stock) {
+      showToast(`Only ${stock} available for ${product.name}.`);
+      return;
+    }
+    existing.qty++;
+    existing.stock = stock;
+  } else {
+    cart.push({ ...product, qty: 1, stock });
+  }
   updateCart();
   showToast(`${product.name} added to cart!`);
   const btn = document.querySelector(`.add-to-cart-btn[data-id="${id}"]`);
@@ -61,8 +102,14 @@ function removeFromCart(id) {
 function changeQty(id, delta) {
   const item = cart.find(i => i.id === id);
   if (!item) return;
+  const product = products.find(p => p.id === id);
+  const maxStock = product ? getStock(product) : (item.stock || 99);
   item.qty += delta;
   if (item.qty <= 0) { removeFromCart(id); return; }
+  if (item.qty > maxStock) {
+    item.qty = maxStock;
+    showToast(`Only ${maxStock} available.`);
+  }
   updateCart();
 }
 
@@ -566,10 +613,37 @@ async function checkUserSession() {
   } catch (err) { /* not logged in */ }
 }
 
+async function loadUserOrders() {
+  const listEl = document.getElementById('auth-orders-list');
+  if (!listEl || !currentUser) return;
+  listEl.innerHTML = '<p class="auth-orders-empty">Loading orders…</p>';
+  try {
+    const res = await fetch('/api/user/orders', { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || !data.orders || data.orders.length === 0) {
+      listEl.innerHTML = '<p class="auth-orders-empty">No orders yet. Start shopping!</p>';
+      return;
+    }
+    listEl.innerHTML = data.orders.map(o => {
+      const date = new Date(o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      const items = (o.items || []).map(i => `${i.product_name} ×${i.quantity}`).join(', ');
+      return `
+        <div class="auth-order-card">
+          <strong>Order #${o.id}</strong> · ₹${Number(o.total_amount).toLocaleString()}
+          <span style="float:right;text-transform:capitalize;color:var(--green);">${o.status || 'pending'}</span>
+          <div class="auth-order-meta">${date} · ${items || '—'}</div>
+        </div>`;
+    }).join('');
+  } catch {
+    listEl.innerHTML = '<p class="auth-orders-empty">Could not load orders.</p>';
+  }
+}
+
 // User button click
 userBtn.addEventListener('click', () => {
   if (currentUser) {
     showAuthView('profile');
+    loadUserOrders();
   } else {
     showAuthView('login');
   }
@@ -624,6 +698,7 @@ document.getElementById('auth-login-form').addEventListener('submit', async (e) 
     } else {
       errorEl.textContent = data.error || 'Login failed.';
       errorEl.classList.add('visible');
+      if (data.needsVerification) showAuthView('register');
     }
   } catch (err) {
     errorEl.textContent = 'Network error. Please try again.';
@@ -655,7 +730,18 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
       credentials: 'include'
     });
     const data = await res.json();
-    if (res.ok && data.success) {
+    if (res.ok && data.requiresVerification) {
+      document.getElementById('auth-otp-instructions').textContent =
+        `Enter the 6-digit code sent to ${data.email || email}`;
+      const hint = document.getElementById('auth-otp-hint');
+      if (hint) {
+        hint.textContent = data.emailMode === 'ethereal'
+          ? 'Dev mode: open the server terminal for an email preview link (not sent to a real inbox).'
+          : "Didn't get it? Check spam/junk, wait 2 minutes, then tap Resend code.";
+      }
+      showAuthView('otp');
+      showToast(data.message || 'Check your email for the verification code.');
+    } else if (res.ok && data.success) {
       currentUser = data.user;
       updateUserUI();
       closeAuthModal();
@@ -665,7 +751,9 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
         window.location.href = 'checkout.html';
       }
     } else {
-      errorEl.textContent = data.error || 'Registration failed.';
+      errorEl.textContent = data.code === 'EMAIL_NOT_CONFIGURED'
+        ? 'Sign-up email is temporarily unavailable. Please email harvestroot2020@gmail.com for help.'
+        : (data.error || 'Registration failed.');
       errorEl.classList.add('visible');
     }
   } catch (err) {
@@ -674,6 +762,35 @@ document.getElementById('auth-register-form').addEventListener('submit', async (
   } finally {
     btn.disabled = false;
     btn.textContent = 'Create Account';
+  }
+});
+
+// Resend OTP
+document.getElementById('auth-resend-otp').addEventListener('click', async () => {
+  const btn = document.getElementById('auth-resend-otp');
+  const errorEl = document.getElementById('auth-otp-error');
+  errorEl.classList.remove('visible');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  try {
+    const res = await fetch('/api/user/resend-otp', {
+      method: 'POST',
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message || 'New code sent!');
+    } else {
+      errorEl.textContent = data.error || 'Could not resend code.';
+      errorEl.classList.add('visible');
+    }
+  } catch {
+    errorEl.textContent = 'Network error. Try again.';
+    errorEl.classList.add('visible');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Resend code';
   }
 });
 
