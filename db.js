@@ -8,11 +8,8 @@ const localDbPath = path.resolve(__dirname, 'database.sqlite');
 const persistentDataDir = process.env.DB_PATH ? path.dirname(process.env.DB_PATH) : (process.env.DATA_DIR || '/var/data');
 let dbPath = localDbPath;
 
-const usePersistentDisk = process.env.DB_PATH
-    || process.env.DATA_DIR
-    || process.env.NODE_ENV === 'production'
-    || process.env.RENDER
-    || process.env.RENDER_SERVICE_ID;
+// Only use persistent disk when explicitly mounted (Render disk → set DATA_DIR or RENDER_DISK_MOUNT_PATH)
+const usePersistentDisk = !!(process.env.DB_PATH || process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH);
 
 if (usePersistentDisk) {
     const persistentDbPath = process.env.DB_PATH

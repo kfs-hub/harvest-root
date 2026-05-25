@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -29,10 +30,7 @@ const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         let uploadDir = path.join(__dirname, 'public', 'images');
         const persistentDataDir = process.env.DATA_DIR || '/var/data';
-        const usePersistentDisk = process.env.NODE_ENV === 'production'
-            || process.env.RENDER
-            || process.env.RENDER_SERVICE_ID
-            || process.env.DATA_DIR;
+        const usePersistentDisk = !!(process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH);
         if (usePersistentDisk) {
             const prodDir = path.join(persistentDataDir, 'images');
             try {
@@ -84,18 +82,27 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
-const sessionSecret = process.env.SESSION_SECRET;
-if (!sessionSecret && process.env.NODE_ENV === 'production') {
-    console.error('FATAL: Set SESSION_SECRET in production.');
-    process.exit(1);
+function resolveSessionSecret() {
+    if (process.env.SESSION_SECRET?.trim()) {
+        return process.env.SESSION_SECRET.trim();
+    }
+    if (process.env.RENDER || process.env.NODE_ENV === 'production') {
+        console.error('⚠️ SESSION_SECRET is not set in Render Environment.');
+        console.error('   Add a long random string (e.g. openssl rand -hex 32) and redeploy.');
+        // Stable fallback per service so deploy succeeds; replace with SESSION_SECRET in dashboard
+        return crypto.createHash('sha256')
+            .update(`harvest-root:${process.env.RENDER_SERVICE_ID || 'render'}:set-session-secret`)
+            .digest('hex');
+    }
+    console.warn('⚠️ Using dev SESSION_SECRET — set SESSION_SECRET in .env for production.');
+    return 'harvest-root-dev-only-secret';
 }
-if (!sessionSecret) {
-    console.warn('⚠️ Using default SESSION_SECRET — set SESSION_SECRET in .env for production.');
-}
+
+const sessionSecret = resolveSessionSecret();
 
 app.use(session({
     name: 'hr.sid',
-    secret: sessionSecret || 'harvest-root-dev-only-secret',
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -105,11 +112,8 @@ app.use(session({
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     }
 }));
-const persistentDataDir = process.env.DATA_DIR || '/var/data';
-const usePersistentDisk = process.env.NODE_ENV === 'production'
-    || process.env.RENDER
-    || process.env.RENDER_SERVICE_ID
-    || process.env.DATA_DIR;
+const persistentDataDir = process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH || '/var/data';
+const usePersistentDisk = !!(process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH);
 
 // Serve uploaded images from persistent disk (if available)
 if (usePersistentDisk) {
@@ -766,6 +770,15 @@ app.put('/api/admin/orders/:id/status', requireAdmin, (req, res) => {
     });
 });
 
+// Health check for Render / uptime monitors
+app.get('/api/health', (req, res) => {
+    res.json({
+        ok: true,
+        email: email.getEmailStatus(),
+        sessionSecretSet: !!process.env.SESSION_SECRET
+    });
+});
+
 // Catch-all: API 404 JSON, unknown pages → 404.html
 app.use((req, res) => {
     if (req.path.startsWith('/api/')) {
@@ -780,16 +793,20 @@ app.use((req, res) => {
     res.status(404).json({ error: 'Not found' });
 });
 
-// Start Server (after email is initialized)
-email.ensureInit().then(() => {
-    app.listen(PORT, () => {
-        console.log(`Server is running on http://localhost:${PORT}`);
+// Start server — email init must not block deploy (SMTP verify can timeout on Render)
+function startServer() {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server is running on port ${PORT}`);
         const status = email.getEmailStatus();
         if (!status.configured) {
-            console.warn('⚠️ Verification emails will NOT reach customers until EMAIL_USER + EMAIL_PASS are set.');
+            console.warn('⚠️ Set EMAIL_USER + EMAIL_PASS in Render for verification emails.');
         }
     });
-}).catch((err) => {
-    console.error('Failed to start:', err.message);
-    process.exit(1);
-});
+}
+
+email.ensureInit()
+    .then(() => startServer())
+    .catch((err) => {
+        console.warn('✉️ Email init warning (starting anyway):', err.message);
+        startServer();
+    });

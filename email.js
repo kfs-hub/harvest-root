@@ -42,10 +42,20 @@ function buildTransport() {
 
 async function initEmail() {
     if (emailUser && emailPass) {
-        transporter = nodemailer.createTransport(buildTransport());
-        await transporter.verify();
+        transporter = nodemailer.createTransport({
+            ...buildTransport(),
+            connectionTimeout: 15000,
+            greetingTimeout: 15000,
+            socketTimeout: 20000
+        });
+        // Do not block deploy on verify() — Render often times out; test on first send
+        try {
+            await transporter.verify();
+            console.log(`✉️ SMTP verified — sending from ${emailUser}`);
+        } catch (err) {
+            console.warn(`✉️ SMTP verify skipped (${err.message}). Will retry when sending mail.`);
+        }
         mode = 'smtp';
-        console.log(`✉️ SMTP ready — verification emails will be sent from ${emailUser}`);
         return;
     }
 
@@ -74,8 +84,13 @@ function ensureInit() {
     if (!initPromise) {
         initPromise = initEmail().catch((err) => {
             initPromise = null;
-            console.error('✉️ Email init failed:', err.message);
-            throw err;
+            console.warn('✉️ Email init:', err.message);
+            if (process.env.NODE_ENV === 'production' && emailUser && emailPass) {
+                // Still allow smtp mode so send can retry
+                transporter = nodemailer.createTransport(buildTransport());
+                mode = 'smtp';
+            }
+            return null;
         });
     }
     return initPromise;
