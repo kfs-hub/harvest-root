@@ -214,7 +214,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
                     } else {
                         // Create a brand new Google user (no password)
                         db.run('INSERT INTO users (name, email, google_id, avatar, auth_provider) VALUES (?, ?, ?, ?, ?)',
-                            [name, email, googleId, avatar, 'google'], function(err) {
+                            [name, email, googleId, avatar, 'google'], function (err) {
                                 if (err) return done(err);
                                 const newUser = { id: this.lastID, name, email, google_id: googleId, avatar, auth_provider: 'google', address: '' };
                                 return done(null, newUser);
@@ -260,7 +260,7 @@ function requireAuth(req, res, next) {
 
 // ===== AUTH ROUTES =====
 
-// Login
+// Loginn
 app.post('/api/auth/login', (req, res) => {
     const { username, password } = req.body;
 
@@ -364,7 +364,7 @@ app.post('/api/user/register', (req, res) => {
         const hash = bcrypt.hashSync(password, 10);
 
         db.run('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
-            [name.trim(), email.toLowerCase().trim(), hash], function(err) {
+            [name.trim(), email.toLowerCase().trim(), hash], function (err) {
                 if (err) {
                     console.error('User registration DB error:', err.message);
                     return res.status(500).json({ error: 'Failed to create account.' });
@@ -406,7 +406,7 @@ app.post('/api/user/verify-otp', (req, res) => {
 
     // Insert user into database
     db.run('INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
-        [tempUser.name, tempUser.email, tempUser.password_hash], function(err) {
+        [tempUser.name, tempUser.email, tempUser.password_hash], function (err) {
             if (err) {
                 return res.status(500).json({ error: 'Failed to create account.' });
             }
@@ -482,7 +482,7 @@ app.put('/api/user/profile', (req, res) => {
         return res.status(401).json({ error: 'Please log in.' });
     }
     const { address } = req.body;
-    db.run('UPDATE users SET address = ? WHERE id = ?', [address || '', req.session.userId], function(err) {
+    db.run('UPDATE users SET address = ? WHERE id = ?', [address || '', req.session.userId], function (err) {
         if (err) {
             return res.status(500).json({ error: 'Failed to update profile.' });
         }
@@ -495,13 +495,13 @@ app.put('/api/user/profile', (req, res) => {
 // 1. Contact Form Submission
 app.post('/api/contact', (req, res) => {
     const { name, email, message } = req.body;
-    
+
     if (!name || !email || !message) {
         return res.status(400).json({ error: 'Name, email, and message are required.' });
     }
 
     const sql = `INSERT INTO contacts (name, email, message) VALUES (?, ?, ?)`;
-    db.run(sql, [name, email, message], function(err) {
+    db.run(sql, [name, email, message], function (err) {
         if (err) {
             console.error('Error saving contact:', err.message);
             return res.status(500).json({ error: 'Failed to save contact message.' });
@@ -551,7 +551,7 @@ app.post('/api/orders', (req, res) => {
             db.run('BEGIN TRANSACTION');
 
             const insertOrderSql = `INSERT INTO orders (customer_name, customer_email, customer_address, total_amount) VALUES (?, ?, ?, ?)`;
-            db.run(insertOrderSql, [customerName, customerEmail, customerAddress, totalAmount], function(err) {
+            db.run(insertOrderSql, [customerName, customerEmail, customerAddress, totalAmount], function (err) {
                 if (err) {
                     console.error('Order creation error:', err.message);
                     db.run('ROLLBACK');
@@ -628,61 +628,61 @@ app.put('/api/admin/products/:id', requireAuth, (req, res, next) => {
 
     db.get(`SELECT * FROM products WHERE id = ?`, [productId], (err, product) => {
         if (err) {
-            if (req.file) fs.unlink(req.file.path, () => {});
+            if (req.file) fs.unlink(req.file.path, () => { });
             console.error('Error fetching product for update:', err.message);
             return res.status(500).json({ error: 'Failed to fetch product.' });
         }
         if (!product) {
-            if (req.file) fs.unlink(req.file.path, () => {});
+            if (req.file) fs.unlink(req.file.path, () => { });
             return res.status(404).json({ error: 'Product not found.' });
         }
-        
+
         // Merge field values
         const updatedName = name !== undefined ? name.trim() : product.name;
         const updatedOrigin = origin !== undefined ? origin.trim() : product.origin;
         const updatedDesc = desc !== undefined ? desc.trim() : product.desc;
-        
+
         let updatedPrice = product.price;
         if (price !== undefined && price !== '') {
             updatedPrice = parseFloat(price);
             if (isNaN(updatedPrice) || updatedPrice < 0) {
-                if (req.file) fs.unlink(req.file.path, () => {});
+                if (req.file) fs.unlink(req.file.path, () => { });
                 return res.status(400).json({ error: 'Valid price is required.' });
             }
         }
-        
+
         const updatedUnit = unit !== undefined ? unit.trim() : product.unit;
         const updatedBadge = badge !== undefined ? badge.trim() : product.badge;
-        
+
         let updatedStock = product.stock;
         if (stock !== undefined && stock !== '') {
             updatedStock = parseInt(stock, 10);
             if (isNaN(updatedStock) || updatedStock < 0) {
-                if (req.file) fs.unlink(req.file.path, () => {});
+                if (req.file) fs.unlink(req.file.path, () => { });
                 return res.status(400).json({ error: 'Valid stock level is required.' });
             }
         }
-        
+
         let updatedImage = product.image;
         let oldImageToDelete = null;
         if (req.file) {
             updatedImage = `images/${req.file.filename}`;
             oldImageToDelete = product.image;
         }
-        
+
         const sql = `UPDATE products SET name = ?, origin = ?, desc = ?, price = ?, unit = ?, badge = ?, image = ?, stock = ? WHERE id = ?`;
-        db.run(sql, [updatedName, updatedOrigin, updatedDesc, updatedPrice, updatedUnit, updatedBadge, updatedImage, updatedStock, productId], function(err) {
+        db.run(sql, [updatedName, updatedOrigin, updatedDesc, updatedPrice, updatedUnit, updatedBadge, updatedImage, updatedStock, productId], function (err) {
             if (err) {
                 console.error('Error updating product:', err.message);
-                if (req.file) fs.unlink(req.file.path, () => {});
+                if (req.file) fs.unlink(req.file.path, () => { });
                 return res.status(500).json({ error: 'Failed to update product.' });
             }
-            
+
             if (this.changes === 0) {
-                if (req.file) fs.unlink(req.file.path, () => {});
+                if (req.file) fs.unlink(req.file.path, () => { });
                 return res.status(404).json({ error: 'Product not found.' });
             }
-            
+
             // Delete old image file if a new one was successfully uploaded
             if (oldImageToDelete && oldImageToDelete !== updatedImage) {
                 // Only delete default initial images if they are in the correct place, but generally safe to unlink
@@ -693,7 +693,7 @@ app.put('/api/admin/products/:id', requireAuth, (req, res, next) => {
                     }
                 });
             }
-            
+
             res.json({ success: true, message: 'Product updated successfully.' });
         });
     });
@@ -702,19 +702,19 @@ app.put('/api/admin/products/:id', requireAuth, (req, res, next) => {
 // 2.7. Admin: Add new product
 app.post('/api/admin/products', requireAuth, upload.single('photo'), (req, res) => {
     const { name, origin, desc, price, unit, badge, stock } = req.body;
-    
+
     if (!req.file) {
         return res.status(400).json({ error: 'Photo/image file is required.' });
     }
 
     if (!name || !origin || !desc || price === undefined || !unit) {
-        fs.unlink(req.file.path, () => {});
+        fs.unlink(req.file.path, () => { });
         return res.status(400).json({ error: 'Name, origin, description, price, and unit are required.' });
     }
 
     const priceNum = parseFloat(price);
     if (isNaN(priceNum) || priceNum < 0) {
-        fs.unlink(req.file.path, () => {});
+        fs.unlink(req.file.path, () => { });
         return res.status(400).json({ error: 'Valid price is required.' });
     }
 
@@ -722,7 +722,7 @@ app.post('/api/admin/products', requireAuth, upload.single('photo'), (req, res) 
     if (stock !== undefined && stock !== '') {
         stockNum = parseInt(stock, 10);
         if (isNaN(stockNum) || stockNum < 0) {
-            fs.unlink(req.file.path, () => {});
+            fs.unlink(req.file.path, () => { });
             return res.status(400).json({ error: 'Valid stock level is required.' });
         }
     }
@@ -730,10 +730,10 @@ app.post('/api/admin/products', requireAuth, upload.single('photo'), (req, res) 
     const imagePath = `images/${req.file.filename}`;
 
     const sql = `INSERT INTO products (name, origin, desc, price, unit, badge, image, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-    db.run(sql, [name, origin, desc, priceNum, unit, badge || '', imagePath, stockNum], function(err) {
+    db.run(sql, [name, origin, desc, priceNum, unit, badge || '', imagePath, stockNum], function (err) {
         if (err) {
             console.error('Error adding product:', err.message);
-            fs.unlink(req.file.path, () => {});
+            fs.unlink(req.file.path, () => { });
             return res.status(500).json({ error: 'Failed to add product.' });
         }
         res.status(201).json({ success: true, message: 'Product added successfully!', id: this.lastID });
@@ -762,7 +762,7 @@ app.delete('/api/admin/products/:id', requireAuth, (req, res) => {
             });
         }
 
-        db.run(`DELETE FROM products WHERE id = ?`, [productId], function(err) {
+        db.run(`DELETE FROM products WHERE id = ?`, [productId], function (err) {
             if (err) {
                 console.error('Error deleting product from DB:', err.message);
                 return res.status(500).json({ error: 'Failed to delete product.' });
@@ -796,13 +796,13 @@ app.get('/api/admin/orders', requireAuth, (req, res) => {
         GROUP BY o.id
         ORDER BY o.created_at DESC
     `;
-    
+
     db.all(sql, [], (err, rows) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ error: 'Failed to fetch orders.' });
         }
-        
+
         // parse the JSON string for items
         const formattedRows = rows.map(row => ({
             ...row,
@@ -817,7 +817,7 @@ app.get('/api/admin/orders', requireAuth, (req, res) => {
 app.put('/api/admin/orders/:id/status', requireAuth, (req, res) => {
     const orderId = req.params.id;
     const { status } = req.body;
-    db.run(`UPDATE orders SET status = ? WHERE id = ?`, [status, orderId], function(err) {
+    db.run(`UPDATE orders SET status = ? WHERE id = ?`, [status, orderId], function (err) {
         if (err) {
             return res.status(500).json({ error: 'Failed to update order status.' });
         }
