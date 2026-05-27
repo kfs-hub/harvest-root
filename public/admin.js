@@ -524,5 +524,6 @@ if (addProductForm) {
     });
 }
 
+
 // ===== INIT =====
 checkAuth();

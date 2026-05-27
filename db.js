@@ -106,7 +106,7 @@ function initDb() {
             db.get(`SELECT COUNT(*) as count FROM products`, (err, row) => {
                 if (!err && row.count === 0) {
                     const initialProducts = [
-                        [1, "Black Pepper", "Coorg Estate", "Bold, aromatic Tellicherry-grade peppercorns. Sun-dried for maximum pungency.", 350, "250g", "Bestseller", "images/Black Pepper.png", 80],
+                        [1, "Black Pepper", "Coorg Estate", "Bold, aromatic Tellicherry-grade peppercorns. Sun-dried for maximum pungency.", 169, "100g", "Bestseller", "images/Black Pepper.png", 80],
                         [2, "Cloves", "Coorg Hills", "Intensely fragrant whole cloves, hand-sorted for premium quality.", 420, "100g", "Premium", "images/Cloves.png", 45],
                         [3, "Green Cardamom", "Western Ghats", "Plump, green pods bursting with sweet, floral aroma. Perfect for chai and desserts.", 580, "100g", "Popular", "images/Cardamom.png", 15],
                         [4, "Cinnamon Sticks", "Coorg Plantation", "True Ceylon-style cinnamon with delicate sweetness. Rolled by hand.", 310, "100g", "", "images/Cinnamon Sticks.png", 0]

@@ -238,6 +238,7 @@ body {
 .btn-delete-product { background: rgba(192, 57, 43, 0.05); border: 1px solid rgba(192, 57, 43, 0.2); width: 36px; height: 36px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; color: var(--red); cursor: pointer; transition: var(--transition); margin-left: auto; }
 .btn-delete-product:hover { background: var(--red); color: var(--white); }
 
+
 /* ADD PRODUCT FORM */
 .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
