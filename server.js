@@ -1,8 +1,11 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const db = require('./db');
 const multer = require('multer');
 const fs = require('fs');
@@ -149,6 +152,83 @@ app.use(session({
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
 }));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Passport: serialize user ID into session
+passport.serializeUser((user, done) => {
+    done(null, user.id);
+});
+
+// Passport: deserialize user from session by ID
+passport.deserializeUser((id, done) => {
+    db.get('SELECT id, name, email, avatar, auth_provider, address FROM users WHERE id = ?', [id], (err, user) => {
+        done(err, user || null);
+    });
+});
+
+// Configure Google OAuth 2.0 Strategy
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    const callbackURL = (process.env.APP_URL || 'http://localhost:3000') + '/api/auth/google/callback';
+    passport.use(new GoogleStrategy({
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: callbackURL
+    }, (accessToken, refreshToken, profile, done) => {
+        const googleId = profile.id;
+        const email = profile.emails && profile.emails[0] ? profile.emails[0].value.toLowerCase() : null;
+        const name = profile.displayName || 'Google User';
+        const avatar = profile.photos && profile.photos[0] ? profile.photos[0].value : null;
+
+        if (!email) {
+            return done(new Error('No email found in Google profile.'));
+        }
+
+        // Check if a user with this google_id already exists
+        db.get('SELECT * FROM users WHERE google_id = ?', [googleId], (err, existingByGoogle) => {
+            if (err) return done(err);
+
+            if (existingByGoogle) {
+                // Returning Google user — update avatar in case it changed
+                db.run('UPDATE users SET avatar = ? WHERE id = ?', [avatar, existingByGoogle.id], () => {
+                    existingByGoogle.avatar = avatar;
+                    return done(null, existingByGoogle);
+                });
+            } else {
+                // Check if a local user with the same email exists
+                db.get('SELECT * FROM users WHERE email = ?', [email], (err, existingByEmail) => {
+                    if (err) return done(err);
+
+                    if (existingByEmail) {
+                        // Link Google account to existing local user
+                        db.run('UPDATE users SET google_id = ?, avatar = ?, auth_provider = ? WHERE id = ?',
+                            [googleId, avatar, 'google', existingByEmail.id], (err) => {
+                                if (err) return done(err);
+                                existingByEmail.google_id = googleId;
+                                existingByEmail.avatar = avatar;
+                                existingByEmail.auth_provider = 'google';
+                                return done(null, existingByEmail);
+                            });
+                    } else {
+                        // Create a brand new Google user (no password)
+                        db.run('INSERT INTO users (name, email, google_id, avatar, auth_provider) VALUES (?, ?, ?, ?, ?)',
+                            [name, email, googleId, avatar, 'google'], function(err) {
+                                if (err) return done(err);
+                                const newUser = { id: this.lastID, name, email, google_id: googleId, avatar, auth_provider: 'google', address: '' };
+                                return done(null, newUser);
+                            });
+                    }
+                });
+            }
+        });
+    }));
+    console.log('✅ Google OAuth strategy configured. Callback:', callbackURL);
+} else {
+    console.warn('⚠️ GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set. Google OAuth disabled.');
+}
+
 const persistentDataDir = process.env.DATA_DIR || '/var/data';
 const usePersistentDisk = process.env.NODE_ENV === 'production'
     || process.env.RENDER
@@ -231,6 +311,33 @@ app.get('/api/auth/check', (req, res) => {
     }
     res.json({ authenticated: false });
 });
+
+// ===== GOOGLE OAUTH ROUTES =====
+
+// Initiate Google OAuth login
+app.get('/api/auth/google', (req, res, next) => {
+    // Save the redirect destination (e.g. checkout page) in session
+    if (req.query.redirect) {
+        req.session.authRedirect = req.query.redirect;
+    }
+    passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+});
+
+// Google OAuth callback
+app.get('/api/auth/google/callback',
+    passport.authenticate('google', { failureRedirect: '/login.html?error=google_failed' }),
+    (req, res) => {
+        // Passport has set req.user — sync to our session format
+        req.session.userId = req.user.id;
+        req.session.userName = req.user.name;
+        req.session.userEmail = req.user.email;
+
+        // Redirect to saved destination or home
+        const redirect = req.session.authRedirect || '/';
+        delete req.session.authRedirect;
+        res.redirect(redirect);
+    }
+);
 
 // ===== USER (CUSTOMER) AUTH ROUTES =====
 
@@ -327,6 +434,11 @@ app.post('/api/user/login', (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password.' });
         }
 
+        // If user signed up via Google and has no password, prompt them to use Google
+        if (!user.password_hash && user.auth_provider === 'google') {
+            return res.status(401).json({ error: 'This account uses Google sign-in. Please use the "Sign in with Google" button.' });
+        }
+
         const match = bcrypt.compareSync(password, user.password_hash);
         if (!match) {
             return res.status(401).json({ error: 'Invalid email or password.' });
@@ -335,7 +447,7 @@ app.post('/api/user/login', (req, res) => {
         req.session.userId = user.id;
         req.session.userName = user.name;
         req.session.userEmail = user.email;
-        res.json({ success: true, user: { name: user.name, email: user.email, address: user.address || '' } });
+        res.json({ success: true, user: { name: user.name, email: user.email, address: user.address || '', avatar: user.avatar || '', auth_provider: user.auth_provider || 'local' } });
     });
 });
 
@@ -353,11 +465,11 @@ app.post('/api/user/logout', (req, res) => {
 // User Check Session
 app.get('/api/user/check', (req, res) => {
     if (req.session && req.session.userId) {
-        db.get('SELECT name, email, address FROM users WHERE id = ?', [req.session.userId], (err, user) => {
+        db.get('SELECT name, email, address, avatar, auth_provider FROM users WHERE id = ?', [req.session.userId], (err, user) => {
             if (err || !user) {
                 return res.json({ authenticated: false });
             }
-            res.json({ authenticated: true, user: { name: user.name, email: user.email, address: user.address || '' } });
+            res.json({ authenticated: true, user: { name: user.name, email: user.email, address: user.address || '', avatar: user.avatar || '', auth_provider: user.auth_provider || 'local' } });
         });
     } else {
         res.json({ authenticated: false });
@@ -398,7 +510,7 @@ app.post('/api/contact', (req, res) => {
     });
 });
 
-// 2. Checkout / Create Order
+// 2. Checkout / Create Order (includes ACID-compliant stock level checks and updates)
 app.post('/api/orders', (req, res) => {
     const { customerName, customerEmail, customerAddress, cartItems, totalAmount } = req.body;
 
@@ -406,34 +518,85 @@ app.post('/api/orders', (req, res) => {
         return res.status(400).json({ error: 'Incomplete order details.' });
     }
 
-    db.serialize(() => {
-        db.run('BEGIN TRANSACTION');
+    // Extract product IDs to query current stock from database
+    const productIds = cartItems.map(item => item.id);
+    const placeholders = productIds.map(() => '?').join(',');
 
-        const insertOrderSql = `INSERT INTO orders (customer_name, customer_email, customer_address, total_amount) VALUES (?, ?, ?, ?)`;
-        db.run(insertOrderSql, [customerName, customerEmail, customerAddress, totalAmount], function(err) {
-            if (err) {
-                db.run('ROLLBACK');
-                return res.status(500).json({ error: 'Failed to create order.' });
+    db.all(`SELECT id, name, stock FROM products WHERE id IN (${placeholders})`, productIds, (err, dbProducts) => {
+        if (err) {
+            console.error('Stock verification error:', err.message);
+            return res.status(500).json({ error: 'Database error during stock verification.' });
+        }
+
+        const productMap = {};
+        for (let p of dbProducts) {
+            productMap[p.id] = p;
+        }
+
+        // Verify stock is sufficient for all items in the cart
+        for (let item of cartItems) {
+            const dbProduct = productMap[item.id];
+            if (!dbProduct) {
+                return res.status(400).json({ error: `Product "${item.name}" is no longer available in our store.` });
             }
-
-            const orderId = this.lastID;
-            const insertItemSql = `INSERT INTO order_items (order_id, product_id, product_name, quantity, price) VALUES (?, ?, ?, ?, ?)`;
-            
-            const stmt = db.prepare(insertItemSql);
-            for (let item of cartItems) {
-                stmt.run([orderId, item.id, item.name, item.qty, item.price], (err) => {
-                    if (err) {
-                        console.error('Error inserting order item:', err.message);
-                    }
+            if (dbProduct.stock < item.qty) {
+                return res.status(400).json({
+                    error: `Only ${dbProduct.stock} unit(s) of "${item.name}" are currently available in stock, but you requested ${item.qty}. Please adjust your cart quantity.`
                 });
             }
-            stmt.finalize();
+        }
 
-            db.run('COMMIT', (err) => {
+        // Proceed to place order and deduct stock in a secure transaction
+        db.serialize(() => {
+            db.run('BEGIN TRANSACTION');
+
+            const insertOrderSql = `INSERT INTO orders (customer_name, customer_email, customer_address, total_amount) VALUES (?, ?, ?, ?)`;
+            db.run(insertOrderSql, [customerName, customerEmail, customerAddress, totalAmount], function(err) {
                 if (err) {
-                    return res.status(500).json({ error: 'Failed to commit order.' });
+                    console.error('Order creation error:', err.message);
+                    db.run('ROLLBACK');
+                    return res.status(500).json({ error: 'Failed to create order in database.' });
                 }
-                res.status(201).json({ success: true, message: 'Order placed successfully!', orderId: orderId });
+
+                const orderId = this.lastID;
+                const insertItemSql = `INSERT INTO order_items (order_id, product_id, product_name, quantity, price) VALUES (?, ?, ?, ?, ?)`;
+                const updateStockSql = `UPDATE products SET stock = stock - ? WHERE id = ?`;
+
+                const stmtItem = db.prepare(insertItemSql);
+                const stmtStock = db.prepare(updateStockSql);
+                let txnError = false;
+
+                for (let item of cartItems) {
+                    stmtItem.run([orderId, item.id, item.name, item.qty, item.price], (err) => {
+                        if (err) {
+                            console.error('Error inserting order item:', err.message);
+                            txnError = true;
+                        }
+                    });
+
+                    stmtStock.run([item.qty, item.id], (err) => {
+                        if (err) {
+                            console.error('Error deducting product stock:', err.message);
+                            txnError = true;
+                        }
+                    });
+                }
+
+                stmtItem.finalize();
+                stmtStock.finalize();
+
+                if (txnError) {
+                    db.run('ROLLBACK');
+                    return res.status(500).json({ error: 'Failed to record order details or update stock levels.' });
+                }
+
+                db.run('COMMIT', (err) => {
+                    if (err) {
+                        console.error('Commit transaction error:', err.message);
+                        return res.status(500).json({ error: 'Failed to commit order transaction.' });
+                    }
+                    res.status(201).json({ success: true, message: 'Order placed successfully!', orderId: orderId });
+                });
             });
         });
     });
@@ -450,30 +613,95 @@ app.get('/api/products', (req, res) => {
     });
 });
 
-// 2.6. Admin: Update product price
-app.put('/api/admin/products/:id', requireAuth, (req, res) => {
-    const productId = req.params.id;
-    const { price } = req.body;
-
-    if (price === undefined || isNaN(price) || price < 0) {
-        return res.status(400).json({ error: 'Valid price is required.' });
+// 2.6. Admin: Update product details (handles both JSON and multipart/form-data for image uploads)
+app.put('/api/admin/products/:id', requireAuth, (req, res, next) => {
+    // If it's a JSON request (e.g. quick price update), bypass Multer
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('application/json')) {
+        return next();
     }
+    // For full forms that can include files, use Multer to parse
+    upload.single('photo')(req, res, next);
+}, (req, res) => {
+    const productId = req.params.id;
+    const { name, origin, desc, price, unit, badge, stock } = req.body;
 
-    db.run(`UPDATE products SET price = ? WHERE id = ?`, [price, productId], function(err) {
+    db.get(`SELECT * FROM products WHERE id = ?`, [productId], (err, product) => {
         if (err) {
-            console.error('Error updating product price:', err.message);
-            return res.status(500).json({ error: 'Failed to update product price.' });
+            if (req.file) fs.unlink(req.file.path, () => {});
+            console.error('Error fetching product for update:', err.message);
+            return res.status(500).json({ error: 'Failed to fetch product.' });
         }
-        if (this.changes === 0) {
+        if (!product) {
+            if (req.file) fs.unlink(req.file.path, () => {});
             return res.status(404).json({ error: 'Product not found.' });
         }
-        res.json({ success: true, message: 'Product price updated successfully.' });
+        
+        // Merge field values
+        const updatedName = name !== undefined ? name.trim() : product.name;
+        const updatedOrigin = origin !== undefined ? origin.trim() : product.origin;
+        const updatedDesc = desc !== undefined ? desc.trim() : product.desc;
+        
+        let updatedPrice = product.price;
+        if (price !== undefined && price !== '') {
+            updatedPrice = parseFloat(price);
+            if (isNaN(updatedPrice) || updatedPrice < 0) {
+                if (req.file) fs.unlink(req.file.path, () => {});
+                return res.status(400).json({ error: 'Valid price is required.' });
+            }
+        }
+        
+        const updatedUnit = unit !== undefined ? unit.trim() : product.unit;
+        const updatedBadge = badge !== undefined ? badge.trim() : product.badge;
+        
+        let updatedStock = product.stock;
+        if (stock !== undefined && stock !== '') {
+            updatedStock = parseInt(stock, 10);
+            if (isNaN(updatedStock) || updatedStock < 0) {
+                if (req.file) fs.unlink(req.file.path, () => {});
+                return res.status(400).json({ error: 'Valid stock level is required.' });
+            }
+        }
+        
+        let updatedImage = product.image;
+        let oldImageToDelete = null;
+        if (req.file) {
+            updatedImage = `images/${req.file.filename}`;
+            oldImageToDelete = product.image;
+        }
+        
+        const sql = `UPDATE products SET name = ?, origin = ?, desc = ?, price = ?, unit = ?, badge = ?, image = ?, stock = ? WHERE id = ?`;
+        db.run(sql, [updatedName, updatedOrigin, updatedDesc, updatedPrice, updatedUnit, updatedBadge, updatedImage, updatedStock, productId], function(err) {
+            if (err) {
+                console.error('Error updating product:', err.message);
+                if (req.file) fs.unlink(req.file.path, () => {});
+                return res.status(500).json({ error: 'Failed to update product.' });
+            }
+            
+            if (this.changes === 0) {
+                if (req.file) fs.unlink(req.file.path, () => {});
+                return res.status(404).json({ error: 'Product not found.' });
+            }
+            
+            // Delete old image file if a new one was successfully uploaded
+            if (oldImageToDelete && oldImageToDelete !== updatedImage) {
+                // Only delete default initial images if they are in the correct place, but generally safe to unlink
+                const absoluteImagePath = path.join(__dirname, 'public', oldImageToDelete);
+                fs.unlink(absoluteImagePath, (err) => {
+                    if (err) {
+                        console.warn('Could not delete old product image:', absoluteImagePath, err.message);
+                    }
+                });
+            }
+            
+            res.json({ success: true, message: 'Product updated successfully.' });
+        });
     });
 });
 
 // 2.7. Admin: Add new product
 app.post('/api/admin/products', requireAuth, upload.single('photo'), (req, res) => {
-    const { name, origin, desc, price, unit, badge } = req.body;
+    const { name, origin, desc, price, unit, badge, stock } = req.body;
     
     if (!req.file) {
         return res.status(400).json({ error: 'Photo/image file is required.' });
@@ -490,10 +718,19 @@ app.post('/api/admin/products', requireAuth, upload.single('photo'), (req, res) 
         return res.status(400).json({ error: 'Valid price is required.' });
     }
 
+    let stockNum = 50;
+    if (stock !== undefined && stock !== '') {
+        stockNum = parseInt(stock, 10);
+        if (isNaN(stockNum) || stockNum < 0) {
+            fs.unlink(req.file.path, () => {});
+            return res.status(400).json({ error: 'Valid stock level is required.' });
+        }
+    }
+
     const imagePath = `images/${req.file.filename}`;
 
-    const sql = `INSERT INTO products (name, origin, desc, price, unit, badge, image) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-    db.run(sql, [name, origin, desc, priceNum, unit, badge || '', imagePath], function(err) {
+    const sql = `INSERT INTO products (name, origin, desc, price, unit, badge, image, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+    db.run(sql, [name, origin, desc, priceNum, unit, badge || '', imagePath, stockNum], function(err) {
         if (err) {
             console.error('Error adding product:', err.message);
             fs.unlink(req.file.path, () => {});

@@ -194,10 +194,14 @@
                                     <input type="text" id="new-product-origin" name="origin" required placeholder="e.g. Coorg Valley">
                                 </div>
                             </div>
-                            <div class="form-grid-3">
+                            <div class="form-grid-4">
                                 <div class="form-group">
                                     <label for="new-product-price">Price (₹)</label>
                                     <input type="number" id="new-product-price" name="price" required min="0" placeholder="e.g. 450">
+                                </div>
+                                <div class="form-group">
+                                    <label for="new-product-stock">Stock Level</label>
+                                    <input type="number" id="new-product-stock" name="stock" required min="0" value="50" placeholder="e.g. 100">
                                 </div>
                                 <div class="form-group">
                                     <label for="new-product-unit">Unit / Quantity</label>
@@ -234,6 +238,74 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+    <!-- Edit Product Modal -->
+    <div class="edit-modal-overlay" id="edit-product-modal">
+        <div class="edit-modal-card">
+            <div class="edit-modal-header">
+                <h2>Edit Product</h2>
+                <button class="btn-close-modal" onclick="closeEditModal()" aria-label="Close modal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="edit-modal-body">
+                <form id="edit-product-form" class="admin-form" enctype="multipart/form-data">
+                    <input type="hidden" id="edit-product-id" name="id">
+                    
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label for="edit-product-name">Product Name</label>
+                            <input type="text" id="edit-product-name" name="name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-product-origin">Origin</label>
+                            <input type="text" id="edit-product-origin" name="origin" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-grid-4">
+                        <div class="form-group">
+                            <label for="edit-product-price">Price (₹)</label>
+                            <input type="number" id="edit-product-price" name="price" required min="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-product-stock">Stock Level</label>
+                            <input type="number" id="edit-product-stock" name="stock" required min="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-product-unit">Unit / Quantity</label>
+                            <input type="text" id="edit-product-unit" name="unit" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-product-badge">Badge (Optional)</label>
+                            <input type="text" id="edit-product-badge" name="badge">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-product-desc">Description</label>
+                        <textarea id="edit-product-desc" name="desc" required></textarea>
+                    </div>
+                    
+                    <div class="edit-photo-section">
+                        <div class="edit-current-photo-container">
+                            <label>Current Photo</label>
+                            <img id="edit-product-photo-preview" src="" alt="Current product image" onerror="this.src='https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&q=80&w=400'">
+                        </div>
+                        <div class="form-group" style="flex:1; margin-bottom: 0;">
+                            <label for="edit-product-photo">Upload New Photo (Optional)</label>
+                            <input type="file" id="edit-product-photo" name="photo" accept="image/*">
+                            <span class="file-help-text">Leave blank to keep the current image.</span>
+                        </div>
+                    </div>
+                    
+                    <div class="edit-modal-footer">
+                        <button type="button" class="btn-cancel-modal" onclick="closeEditModal()">Cancel</button>
+                        <button type="submit" class="btn-submit-form" style="margin-top:0;">Save Changes</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

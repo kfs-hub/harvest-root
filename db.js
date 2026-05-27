@@ -84,17 +84,34 @@ function initDb() {
             price REAL NOT NULL,
             unit TEXT NOT NULL,
             badge TEXT,
-            image TEXT NOT NULL
+            image TEXT NOT NULL,
+            stock INTEGER DEFAULT 50
         )`, () => {
+            // Check if column 'stock' exists for backward compatibility
+            db.all(`PRAGMA table_info(products)`, (err, columns) => {
+                if (!err && columns) {
+                    const hasStock = columns.some(col => col.name === 'stock');
+                    if (!hasStock) {
+                        db.run(`ALTER TABLE products ADD COLUMN stock INTEGER DEFAULT 50`, (alterErr) => {
+                            if (!alterErr) {
+                                console.log('Added stock column to products table.');
+                            } else {
+                                console.error('Error adding stock column:', alterErr.message);
+                            }
+                        });
+                    }
+                }
+            });
+
             db.get(`SELECT COUNT(*) as count FROM products`, (err, row) => {
                 if (!err && row.count === 0) {
                     const initialProducts = [
-                        [1, "Black Pepper", "Coorg Estate", "Bold, aromatic Tellicherry-grade peppercorns. Sun-dried for maximum pungency.", 350, "250g", "Bestseller", "images/Black Pepper.png"],
-                        [2, "Cloves", "Coorg Hills", "Intensely fragrant whole cloves, hand-sorted for premium quality.", 420, "100g", "Premium", "images/Cloves.png"],
-                        [3, "Green Cardamom", "Western Ghats", "Plump, green pods bursting with sweet, floral aroma. Perfect for chai and desserts.", 580, "100g", "Popular", "images/Cardamom.png"],
-                        [4, "Cinnamon Sticks", "Coorg Plantation", "True Ceylon-style cinnamon with delicate sweetness. Rolled by hand.", 310, "100g", "", "images/Cinnamon Sticks.png"]
+                        [1, "Black Pepper", "Coorg Estate", "Bold, aromatic Tellicherry-grade peppercorns. Sun-dried for maximum pungency.", 350, "250g", "Bestseller", "images/Black Pepper.png", 80],
+                        [2, "Cloves", "Coorg Hills", "Intensely fragrant whole cloves, hand-sorted for premium quality.", 420, "100g", "Premium", "images/Cloves.png", 45],
+                        [3, "Green Cardamom", "Western Ghats", "Plump, green pods bursting with sweet, floral aroma. Perfect for chai and desserts.", 580, "100g", "Popular", "images/Cardamom.png", 15],
+                        [4, "Cinnamon Sticks", "Coorg Plantation", "True Ceylon-style cinnamon with delicate sweetness. Rolled by hand.", 310, "100g", "", "images/Cinnamon Sticks.png", 0]
                     ];
-                    const stmt = db.prepare(`INSERT INTO products (id, name, origin, desc, price, unit, badge, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+                    const stmt = db.prepare(`INSERT INTO products (id, name, origin, desc, price, unit, badge, image, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
                     for (let p of initialProducts) {
                         stmt.run(p);
                     }
@@ -130,10 +147,41 @@ function initDb() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
+            password_hash TEXT,
+            google_id TEXT UNIQUE,
+            avatar TEXT,
+            auth_provider TEXT DEFAULT 'local',
             address TEXT DEFAULT '',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
+        )`, () => {
+            // Migrate existing users table: add new columns if they don't exist
+            db.all(`PRAGMA table_info(users)`, (err, columns) => {
+                if (!err && columns) {
+                    const colNames = columns.map(col => col.name);
+
+                    if (!colNames.includes('google_id')) {
+                        db.run(`ALTER TABLE users ADD COLUMN google_id TEXT`, (e) => {
+                            if (!e) {
+                                console.log('Added google_id column to users table.');
+                                db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)`, (e2) => {
+                                    if (!e2) console.log('Created unique index on users.google_id.');
+                                });
+                            }
+                        });
+                    }
+                    if (!colNames.includes('avatar')) {
+                        db.run(`ALTER TABLE users ADD COLUMN avatar TEXT`, (e) => {
+                            if (!e) console.log('Added avatar column to users table.');
+                        });
+                    }
+                    if (!colNames.includes('auth_provider')) {
+                        db.run(`ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'local'`, (e) => {
+                            if (!e) console.log('Added auth_provider column to users table.');
+                        });
+                    }
+                }
+            });
+        });
 
         console.log('Database tables initialized.');
     });

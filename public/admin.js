@@ -319,6 +319,7 @@ function renderContacts() {
 }
 
 // ===== RENDER PRODUCTS (ADMIN) =====
+// ===== RENDER PRODUCTS (ADMIN) =====
 function renderProducts() {
     const container = document.getElementById('products-list-admin');
     if (!container) return;
@@ -332,66 +333,118 @@ function renderProducts() {
         return;
     }
 
-    container.innerHTML = allProducts.map(p => `
-        <div class="admin-product-card">
-            <img src="../${p.image}" class="admin-product-img" alt="${p.name}" onerror="this.src='https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&q=80&w=400'">
-            <div class="admin-product-info">
-                <div class="admin-product-name">${p.name}</div>
-                <div class="admin-product-meta">${p.origin} · ${p.unit}</div>
-                <div class="admin-product-edit-group">
-                    <div class="admin-product-input-wrapper">
-                        <span class="admin-product-input-prefix">₹</span>
-                        <input type="number" id="price-input-${p.id}" class="admin-product-input" value="${p.price}" min="0">
+    container.innerHTML = allProducts.map(p => {
+        // Stock status badge
+        let stockClass = 'instock';
+        let stockText = `In Stock (${p.stock})`;
+        if (p.stock <= 0) {
+            stockClass = 'outofstock';
+            stockText = 'Out of Stock';
+        } else if (p.stock <= 15) {
+            stockClass = 'lowstock';
+            stockText = `Low Stock (${p.stock})`;
+        }
+
+        const badgeHtml = p.badge ? `<span style="background:var(--green);color:white;font-size:0.7rem;padding:2px 6px;border-radius:4px;font-weight:600;display:inline-block;">${p.badge}</span>` : '';
+
+        return `
+            <div class="admin-product-card" id="admin-product-card-${p.id}">
+                <img src="../${p.image}" class="admin-product-img" alt="${p.name}" onerror="this.src='https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&q=80&w=400'">
+                <div class="admin-product-info">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+                        <span class="admin-product-name" style="margin-bottom:0;font-weight:600;font-size:1.15rem;font-family:var(--font-serif);">${p.name}</span>
+                        ${badgeHtml}
                     </div>
-                    <button class="btn-update-price" onclick="updateProductPrice(${p.id})">Update</button>
-                    <button class="btn-delete-product" onclick="deleteProduct(${p.id})" title="Delete Product">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                    </button>
+                    <div class="admin-product-meta" style="margin-bottom:8px;">${p.origin} · per ${p.unit}</div>
+                    
+                    <div>
+                        <span class="stock-badge ${stockClass}">${stockText}</span>
+                    </div>
+
+                    <div class="admin-product-edit-group" style="margin-top:8px;">
+                        <span class="admin-product-price-label">₹${p.price}</span>
+                        <button class="btn-edit-details" onclick="openEditModal(${p.id})">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                            Edit Details
+                        </button>
+                        <button class="btn-delete-product" onclick="deleteProduct(${p.id})" title="Delete Product" style="margin-left:0;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
-// ===== UPDATE PRODUCT PRICE =====
-async function updateProductPrice(id) {
-    const input = document.getElementById(`price-input-${id}`);
-    if (!input) return;
-    const price = parseFloat(input.value);
+// ===== EDIT MODAL LOGIC =====
+const editModal = document.getElementById('edit-product-modal');
+const editForm = document.getElementById('edit-product-form');
 
-    if (isNaN(price) || price < 0) {
-        alert('Please enter a valid price.');
-        return;
+function openEditModal(productId) {
+    const p = allProducts.find(prod => prod.id === productId);
+    if (!p) return;
+
+    // Fill form fields
+    document.getElementById('edit-product-id').value = p.id;
+    document.getElementById('edit-product-name').value = p.name;
+    document.getElementById('edit-product-origin').value = p.origin;
+    document.getElementById('edit-product-price').value = p.price;
+    document.getElementById('edit-product-stock').value = p.stock !== undefined ? p.stock : 50;
+    document.getElementById('edit-product-unit').value = p.unit;
+    document.getElementById('edit-product-badge').value = p.badge || '';
+    document.getElementById('edit-product-desc').value = p.desc;
+    
+    // Preview current photo
+    document.getElementById('edit-product-photo-preview').src = `../${p.image}`;
+    
+    // Reset file input
+    document.getElementById('edit-product-photo').value = '';
+
+    // Open overlay
+    editModal.classList.add('open');
+}
+
+function closeEditModal() {
+    if (editModal) {
+        editModal.classList.remove('open');
     }
+}
 
-    try {
-        const res = await authFetch(`/api/admin/products/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ price })
-        });
-        if (res.ok) {
-            const btn = input.parentElement.nextElementSibling;
-            const originalText = btn.textContent;
-            btn.textContent = '✓ Saved';
-            btn.style.background = 'var(--accent-emerald)';
-            btn.style.color = '#fff';
-            setTimeout(() => {
-                btn.textContent = originalText;
-                btn.style.background = '';
-                btn.style.color = '';
-            }, 1500);
-            
-            // Quietly update local state price
-            const prod = allProducts.find(p => p.id === id);
-            if (prod) prod.price = price;
-        } else {
-            const data = await res.json();
-            alert(data.error || 'Failed to update price');
+// Handle product updates via Edit Form
+if (editForm) {
+    editForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const id = document.getElementById('edit-product-id').value;
+        const formData = new FormData(editForm);
+        
+        const submitBtn = editForm.querySelector('button[type="submit"]');
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving Changes...';
+
+        try {
+            const res = await authFetch(`/api/admin/products/${id}`, {
+                method: 'PUT',
+                body: formData
+            });
+
+            if (res.ok) {
+                alert('Product details updated successfully!');
+                closeEditModal();
+                fetchProducts();
+            } else {
+                const data = await res.json();
+                alert(data.error || 'Failed to update product.');
+            }
+        } catch (err) {
+            alert('Network error. Failed to update product.');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
         }
-    } catch (err) {
-        alert('Network error. Failed to update price.');
-    }
+    });
 }
 
 // ===== UPDATE ORDER STATUS =====

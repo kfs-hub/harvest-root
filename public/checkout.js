@@ -23,12 +23,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('name').style.opacity = '0.7';
             document.getElementById('email').style.opacity = '0.7';
         } else {
-            // Not logged in — redirect back to home
-            window.location.href = '/';
+            // Not logged in — redirect to login page
+            window.location.href = 'login.html?redirect=checkout.html';
             return;
         }
     } catch (err) {
-        window.location.href = '/';
+        window.location.href = 'login.html?redirect=checkout.html';
         return;
     }
 

@@ -22,35 +22,87 @@ async function fetchProducts() {
 function renderProducts() {
   const grid = document.getElementById('products-grid');
   if (!grid) return;
-  grid.innerHTML = products.map((p, i) => `
-    <div class="product-card" data-animate="fade-up" data-delay="${i * 100}">
-      <div class="product-image">
-        <img src="${p.image}" alt="${p.name}" loading="lazy">
-        ${p.badge ? `<span class="product-badge">${p.badge}</span>` : ''}
-      </div>
-      <div class="product-info">
-        <h3 class="product-name">${p.name}</h3>
-        <p class="product-origin">${p.origin}</p>
-        <p class="product-desc">${p.desc}</p>
-        <div class="product-footer">
-          <div class="product-price">&#8377;${p.price} <span>/ ${p.unit}</span></div>
-          <button class="add-to-cart-btn" data-id="${p.id}" onclick="addToCart(${p.id})">Add to Cart</button>
+  grid.innerHTML = products.map((p, i) => {
+    const isOutOfStock = p.stock <= 0;
+    const isLowStock = p.stock > 0 && p.stock <= 10;
+    
+    let badgeHtml = '';
+    if (isOutOfStock) {
+      badgeHtml = `<span class="product-badge out-of-stock" style="background:#c0392b;color:white;">Out of Stock</span>`;
+    } else if (p.badge) {
+      badgeHtml = `<span class="product-badge">${p.badge}</span>`;
+    }
+
+    let stockWarningHtml = '';
+    if (isLowStock) {
+      stockWarningHtml = `<p class="stock-warning" style="color:#e67e22;font-size:0.75rem;font-weight:600;margin-bottom:8px;margin-top:4px;display:flex;align-items:center;gap:4px;">⚠️ Only ${p.stock} left in stock!</p>`;
+    } else if (isOutOfStock) {
+      stockWarningHtml = `<p class="stock-warning" style="color:#c0392b;font-size:0.75rem;font-weight:600;margin-bottom:8px;margin-top:4px;display:flex;align-items:center;gap:4px;">❌ Temporarily Sold Out</p>`;
+    } else {
+      stockWarningHtml = `<p class="stock-warning" style="color:#27ae60;font-size:0.75rem;font-weight:600;margin-bottom:8px;margin-top:4px;display:flex;align-items:center;gap:4px;">✓ In Stock</p>`;
+    }
+
+    let btnHtml = '';
+    if (isOutOfStock) {
+      btnHtml = `<button class="add-to-cart-btn out-of-stock" disabled style="background:#e4d8c9;color:#8c7e6c;cursor:not-allowed;box-shadow:none;border:1px solid #d1c7bd;">Sold Out</button>`;
+    } else {
+      btnHtml = `<button class="add-to-cart-btn" data-id="${p.id}" onclick="addToCart(${p.id})">Add to Cart</button>`;
+    }
+
+    return `
+      <div class="product-card" data-animate="fade-up" data-delay="${i * 100}" style="${isOutOfStock ? 'opacity: 0.85;' : ''}">
+        <div class="product-image" style="${isOutOfStock ? 'filter: grayscale(0.4);' : ''}">
+          <img src="${p.image}" alt="${p.name}" loading="lazy">
+          ${badgeHtml}
+        </div>
+        <div class="product-info" style="display:flex; flex-direction:column;">
+          <h3 class="product-name">${p.name}</h3>
+          <p class="product-origin">${p.origin}</p>
+          <p class="product-desc">${p.desc}</p>
+          <div class="product-footer-container" style="margin-top:auto; width:100%;">
+            ${stockWarningHtml}
+            <div class="product-footer" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+              <div class="product-price">&#8377;${p.price} <span>/ ${p.unit}</span></div>
+              ${btnHtml}
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
   initAnimations();
 }
 
 // ===== CART =====
 function addToCart(id) {
   const product = products.find(p => p.id === id);
+  if (!product) return;
+
   const existing = cart.find(item => item.id === id);
-  if (existing) { existing.qty++; } else { cart.push({ ...product, qty: 1 }); }
+  const currentQty = existing ? existing.qty : 0;
+
+  // Enforce stock check
+  if (currentQty + 1 > product.stock) {
+    showToast(`Sorry, only ${product.stock} units of ${product.name} are available.`);
+    return;
+  }
+
+  if (existing) { 
+    existing.qty++; 
+  } else { 
+    cart.push({ ...product, qty: 1 }); 
+  }
   updateCart();
   showToast(`${product.name} added to cart!`);
   const btn = document.querySelector(`.add-to-cart-btn[data-id="${id}"]`);
-  if (btn) { btn.classList.add('added'); btn.textContent = '✓ Added'; setTimeout(() => { btn.classList.remove('added'); btn.textContent = 'Add to Cart'; }, 1500); }
+  if (btn) { 
+    btn.classList.add('added'); 
+    btn.textContent = '✓ Added'; 
+    setTimeout(() => { 
+      btn.classList.remove('added'); 
+      btn.textContent = 'Add to Cart'; 
+    }, 1500); 
+  }
 }
 
 function removeFromCart(id) {
@@ -61,6 +113,14 @@ function removeFromCart(id) {
 function changeQty(id, delta) {
   const item = cart.find(i => i.id === id);
   if (!item) return;
+
+  // Enforce stock check when incrementing quantity in the cart
+  const product = products.find(p => p.id === id);
+  if (product && delta > 0 && item.qty + delta > product.stock) {
+    showToast(`Sorry, only ${product.stock} units of ${product.name} are available in stock.`);
+    return;
+  }
+
   item.qty += delta;
   if (item.qty <= 0) { removeFromCart(id); return; }
   updateCart();
@@ -103,7 +163,7 @@ function updateCart() {
     shippingFill.style.width = pct + '%';
     const left = Math.max(FREE_SHIPPING - totalPrice, 0);
     if (left === 0) {
-      shippingMsg.innerHTML = `<strong>🎉 You've unlocked free shipping!</strong>`;
+      shippingMsg.innerHTML = `<strong>✓ You've unlocked free shipping!</strong>`;
       shippingFill.style.background = 'var(--green)';
     } else {
       shippingLeft.textContent = `₹${left.toLocaleString()}`;
@@ -495,9 +555,7 @@ document.getElementById('checkout-btn').addEventListener('click', () => {
   // Require user login before checkout
   if (!currentUser) {
     closeCart();
-    pendingCheckout = true;
-    openAuthModal();
-    showToast('Please sign in or create an account to place your order.');
+    window.location.href = 'login.html?redirect=checkout.html';
     return;
   }
   window.location.href = 'checkout.html';
@@ -505,54 +563,52 @@ document.getElementById('checkout-btn').addEventListener('click', () => {
 
 // ===== USER AUTH =====
 let currentUser = null;
-let pendingCheckout = false;
 
-const authOverlay = document.getElementById('auth-overlay');
-const authClose = document.getElementById('auth-close');
-const authLoginView = document.getElementById('auth-login-view');
-const authRegisterView = document.getElementById('auth-register-view');
-const authOtpView = document.getElementById('auth-otp-view');
-const authProfileView = document.getElementById('auth-profile-view');
-const userBtn = document.getElementById('user-btn');
-const userBadge = document.getElementById('user-name-badge');
-
-function openAuthModal() {
-  authOverlay.classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-
-function closeAuthModal() {
-  authOverlay.classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-function showAuthView(view) {
-  authLoginView.style.display = 'none';
-  authRegisterView.style.display = 'none';
-  authOtpView.style.display = 'none';
-  authProfileView.style.display = 'none';
-  // Clear errors
-  document.querySelectorAll('.auth-error').forEach(el => { el.classList.remove('visible'); el.textContent = ''; });
-  if (view === 'login') authLoginView.style.display = 'block';
-  else if (view === 'register') authRegisterView.style.display = 'block';
-  else if (view === 'otp') authOtpView.style.display = 'block';
-  else if (view === 'profile') authProfileView.style.display = 'block';
-}
+const navSigninBtn = document.getElementById('nav-signin-btn');
+const userProfileDropdown = document.getElementById('user-profile-dropdown');
+const userAvatarBtn = document.getElementById('user-avatar-btn');
+const userAvatarImg = document.getElementById('user-avatar-img');
+const userDropdownMenu = document.getElementById('user-dropdown-menu');
+const userDropdownName = document.getElementById('user-dropdown-name');
+const userDropdownEmail = document.getElementById('user-dropdown-email');
+const navLogoutBtn = document.getElementById('nav-logout-btn');
 
 function updateUserUI() {
   if (currentUser) {
-    userBadge.textContent = currentUser.name.charAt(0).toUpperCase();
-    userBadge.style.display = 'inline-flex';
-    userBtn.style.color = 'var(--green)';
-    // Update profile view
-    document.getElementById('auth-avatar').textContent = currentUser.name.charAt(0).toUpperCase();
-    document.getElementById('auth-profile-name').textContent = currentUser.name;
-    document.getElementById('auth-profile-email').textContent = currentUser.email;
+    if (navSigninBtn) navSigninBtn.style.display = 'none';
+    if (userProfileDropdown) userProfileDropdown.style.display = 'inline-block';
+    
+    if (userDropdownName) userDropdownName.textContent = currentUser.name;
+    if (userDropdownEmail) userDropdownEmail.textContent = currentUser.email;
+    
+    if (userAvatarImg) {
+      if (currentUser.avatar) {
+        userAvatarImg.innerHTML = `<img src="${currentUser.avatar}" alt="${currentUser.name}">`;
+      } else {
+        userAvatarImg.textContent = currentUser.name.charAt(0).toUpperCase();
+      }
+    }
   } else {
-    userBadge.style.display = 'none';
-    userBtn.style.color = '';
+    if (navSigninBtn) navSigninBtn.style.display = 'inline-block';
+    if (userProfileDropdown) userProfileDropdown.style.display = 'none';
+    if (userDropdownMenu) userDropdownMenu.classList.remove('show');
   }
 }
+
+// Toggle Dropdown Menu
+if (userAvatarBtn) {
+  userAvatarBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (userDropdownMenu) userDropdownMenu.classList.toggle('show');
+  });
+}
+
+// Close Dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  if (userDropdownMenu && !userDropdownMenu.contains(e.target) && e.target !== userAvatarBtn && !userAvatarBtn.contains(e.target)) {
+    userDropdownMenu.classList.remove('show');
+  }
+});
 
 // Check user session on page load
 async function checkUserSession() {
@@ -566,174 +622,17 @@ async function checkUserSession() {
   } catch (err) { /* not logged in */ }
 }
 
-// User button click
-userBtn.addEventListener('click', () => {
-  if (currentUser) {
-    showAuthView('profile');
-  } else {
-    showAuthView('login');
-  }
-  openAuthModal();
-});
-
-// Close modal
-authClose.addEventListener('click', closeAuthModal);
-authOverlay.addEventListener('click', (e) => {
-  if (e.target === authOverlay) closeAuthModal();
-});
-
-// Toggle between login and register
-document.getElementById('show-register').addEventListener('click', (e) => {
-  e.preventDefault();
-  showAuthView('register');
-});
-document.getElementById('show-login').addEventListener('click', (e) => {
-  e.preventDefault();
-  showAuthView('login');
-});
-
-// Login form
-document.getElementById('auth-login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const errorEl = document.getElementById('auth-login-error');
-  const btn = document.getElementById('auth-login-btn');
-  errorEl.classList.remove('visible');
-  btn.disabled = true;
-  btn.textContent = 'Signing in...';
-
-  const email = document.getElementById('auth-login-email').value;
-  const password = document.getElementById('auth-login-password').value;
-
-  try {
-    const res = await fetch('/api/user/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-      credentials: 'include'
-    });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      currentUser = data.user;
-      updateUserUI();
-      closeAuthModal();
-      showToast(`Welcome back, ${currentUser.name}!`);
-      if (pendingCheckout) {
-        pendingCheckout = false;
-        window.location.href = 'checkout.html';
-      }
-    } else {
-      errorEl.textContent = data.error || 'Login failed.';
-      errorEl.classList.add('visible');
-    }
-  } catch (err) {
-    errorEl.textContent = 'Network error. Please try again.';
-    errorEl.classList.add('visible');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Sign In';
-  }
-});
-
-// Register form
-document.getElementById('auth-register-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const errorEl = document.getElementById('auth-register-error');
-  const btn = document.getElementById('auth-register-btn');
-  errorEl.classList.remove('visible');
-  btn.disabled = true;
-  btn.textContent = 'Creating account...';
-
-  const name = document.getElementById('auth-reg-name').value;
-  const email = document.getElementById('auth-reg-email').value;
-  const password = document.getElementById('auth-reg-password').value;
-
-  try {
-    const res = await fetch('/api/user/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password }),
-      credentials: 'include'
-    });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      currentUser = data.user;
-      updateUserUI();
-      closeAuthModal();
-      showToast(`Welcome to Harvest Root, ${currentUser.name}! 🌿`);
-      if (pendingCheckout) {
-        pendingCheckout = false;
-        window.location.href = 'checkout.html';
-      }
-    } else {
-      errorEl.textContent = data.error || 'Registration failed.';
-      errorEl.classList.add('visible');
-    }
-  } catch (err) {
-    errorEl.textContent = 'Network error. Please try again.';
-    errorEl.classList.add('visible');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Create Account';
-  }
-});
-
-// Cancel OTP / Go back
-document.getElementById('cancel-otp').addEventListener('click', (e) => {
-  e.preventDefault();
-  showAuthView('register');
-});
-
-// OTP verification form submit
-document.getElementById('auth-otp-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const errorEl = document.getElementById('auth-otp-error');
-  const btn = document.getElementById('auth-otp-btn');
-  errorEl.classList.remove('visible');
-  btn.disabled = true;
-  btn.textContent = 'Verifying...';
-
-  const code = document.getElementById('auth-otp-code').value.trim();
-
-  try {
-    const res = await fetch('/api/user/verify-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-      credentials: 'include'
-    });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      currentUser = data.user;
-      updateUserUI();
-      closeAuthModal();
-      showToast(`Welcome to Harvest Root, ${currentUser.name}! 🌿`);
-      if (pendingCheckout) {
-        pendingCheckout = false;
-        window.location.href = 'checkout.html';
-      }
-    } else {
-      errorEl.textContent = data.error || 'Verification failed.';
-      errorEl.classList.add('visible');
-    }
-  } catch (err) {
-    errorEl.textContent = 'Network error. Please try again.';
-    errorEl.classList.add('visible');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Verify Code';
-  }
-});
-
 // Logout
-document.getElementById('auth-logout-btn').addEventListener('click', async () => {
-  try {
-    await fetch('/api/user/logout', { method: 'POST', credentials: 'include' });
-  } catch (err) {}
-  currentUser = null;
-  updateUserUI();
-  closeAuthModal();
-  showToast('You have been signed out.');
-});
+if (navLogoutBtn) {
+  navLogoutBtn.addEventListener('click', async () => {
+    try {
+      await fetch('/api/user/logout', { method: 'POST', credentials: 'include' });
+    } catch (err) {}
+    currentUser = null;
+    updateUserUI();
+    showToast('You have been signed out.');
+  });
+}
 
 // ===== INIT =====
 fetchProducts();
