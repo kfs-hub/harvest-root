@@ -224,7 +224,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             }
         });
     }));
-    console.log('✅ Google OAuth strategy configured. Callback:', callbackURL);
+    console.log('✅ Google OAuth strategy configured with dynamic proxy trust.');
 } else {
     console.warn('⚠️ GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set. Google OAuth disabled.');
 }
