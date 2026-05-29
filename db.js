@@ -92,6 +92,18 @@ async function initDb() {
             )
         `);
 
+
+        // Create OTP verifications table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS otp_verifications (
+                id SERIAL PRIMARY KEY,
+                email TEXT NOT NULL,
+                otp_code TEXT NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                used BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
         // Create users table (customers)
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (

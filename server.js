@@ -341,81 +341,6 @@ app.get('/api/auth/google/callback',
 
 // ===== USER (CUSTOMER) AUTH ROUTES =====
 
-// User Register
-app.post('/api/user/register', async (req, res) => {
-    const { name, email, password } = req.body;
-
-    if (!name || !email || !password) {
-        return res.status(400).json({ error: 'Name, email, and password are required.' });
-    }
-    if (password.length < 6) {
-        return res.status(400).json({ error: 'Password must be at least 6 characters.' });
-    }
-
-    try {
-        const { rows } = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
-        if (rows.length > 0) {
-            return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
-        }
-
-        const hash = bcrypt.hashSync(password, 10);
-        const { rows: insertRows } = await pool.query(
-            'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
-            [name.trim(), email.toLowerCase().trim(), hash]
-        );
-
-        req.session.userId = insertRows[0].id;
-        req.session.userName = name.trim();
-        req.session.userEmail = email.toLowerCase().trim();
-
-        res.status(201).json({
-            success: true,
-            message: 'Account created successfully.',
-            user: {
-                name: name.trim(),
-                email: email.toLowerCase().trim()
-            }
-        });
-    } catch (err) {
-        console.error('User registration DB error:', err.message);
-        return res.status(500).json({ error: 'Failed to create account.' });
-    }
-});
-
-// User Login
-app.post('/api/user/login', async (req, res) => {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required.' });
-    }
-
-    try {
-        const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-        const user = rows[0];
-
-        if (!user) {
-            return res.status(401).json({ error: 'Invalid email or password.' });
-        }
-
-        if (!user.password_hash && user.auth_provider === 'google') {
-            return res.status(401).json({ error: 'This account uses Google sign-in. Please use the "Sign in with Google" button.' });
-        }
-
-        const match = bcrypt.compareSync(password, user.password_hash);
-        if (!match) {
-            return res.status(401).json({ error: 'Invalid email or password.' });
-        }
-
-        req.session.userId = user.id;
-        req.session.userName = user.name;
-        req.session.userEmail = user.email;
-        res.json({ success: true, user: { name: user.name, email: user.email, address: user.address || '', avatar: user.avatar || '', auth_provider: user.auth_provider || 'local' } });
-    } catch (err) {
-        return res.status(500).json({ error: 'Server error.' });
-    }
-});
-
 // User Logout
 app.post('/api/user/logout', (req, res) => {
     req.session.destroy((err) => {
@@ -456,6 +381,65 @@ app.put('/api/user/profile', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         return res.status(500).json({ error: 'Failed to update profile.' });
+    }
+});
+
+// ===== OTP ROUTES =====
+
+// Send OTP
+app.post("/api/otp/send", async (req, res) => {
+    const { email, name } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required." });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    try {
+        // Invalidate any existing unused OTPs for this email
+        await pool.query(
+            `UPDATE otp_verifications SET used = TRUE WHERE email = $1 AND used = FALSE`,
+            [email.toLowerCase()]
+        );
+
+        // Store new OTP
+        await pool.query(
+            `INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)`,
+            [email.toLowerCase(), otp, expiresAt]
+        );
+
+        // Send email
+        await sendOTPEmail(email, name || "there", otp);
+        res.json({ success: true, message: "OTP sent to your email." });
+    } catch (err) {
+        console.error("OTP send error:", err.message);
+        res.status(500).json({ error: "Failed to send OTP. Please try again." });
+    }
+});
+
+// Verify OTP
+app.post("/api/otp/verify", async (req, res) => {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ error: "Email and OTP are required." });
+
+    try {
+        const { rows } = await pool.query(
+            `SELECT * FROM otp_verifications 
+             WHERE email = $1 AND otp_code = $2 AND used = FALSE AND expires_at > NOW()
+             ORDER BY created_at DESC LIMIT 1`,
+            [email.toLowerCase(), otp]
+        );
+
+        if (rows.length === 0) {
+            return res.status(400).json({ error: "Invalid or expired OTP. Please request a new one." });
+        }
+
+        // Mark OTP as used
+        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE id = $1`, [rows[0].id]);
+
+        res.json({ success: true, message: "OTP verified successfully." });
+    } catch (err) {
+        console.error("OTP verify error:", err.message);
+        res.status(500).json({ error: "Failed to verify OTP." });
     }
 });
 
