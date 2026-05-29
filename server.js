@@ -768,11 +768,53 @@ app.get('/api/admin/orders', requireAuth, async (req, res) => {
 app.put('/api/admin/orders/:id/status', requireAuth, async (req, res) => {
     const orderId = req.params.id;
     const { status } = req.body;
+    const client = await pool.connect();
     try {
-        await pool.query('UPDATE orders SET status = $1 WHERE id = $2', [status, orderId]);
+        await client.query('BEGIN');
+
+        // Get current status before updating
+        const { rows: orderRows } = await client.query('SELECT status FROM orders WHERE id = $1', [orderId]);
+        if (orderRows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Order not found.' });
+        }
+        const currentStatus = orderRows[0].status;
+
+        // Fetch order items once for both cases
+        const { rows: items } = await client.query(
+            'SELECT product_id, quantity FROM order_items WHERE order_id = $1',
+            [orderId]
+        );
+
+        // If cancelling → restore stock
+        if (status === 'cancelled' && currentStatus !== 'cancelled') {
+            for (const item of items) {
+                await client.query(
+                    'UPDATE products SET stock = stock + $1 WHERE id = $2',
+                    [item.quantity, item.product_id]
+                );
+            }
+        }
+
+        // If un-cancelling (cancelled → pending/completed) → deduct stock back
+        if (currentStatus === 'cancelled' && status !== 'cancelled') {
+            for (const item of items) {
+                await client.query(
+                    'UPDATE products SET stock = GREATEST(stock - $1, 0) WHERE id = $2',
+                    [item.quantity, item.product_id]
+                );
+            }
+        }
+
+        await client.query('UPDATE orders SET status = $1 WHERE id = $2', [status, orderId]);
+        await client.query('COMMIT');
         res.json({ success: true });
     } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Error updating order status:', err.message);
         return res.status(500).json({ error: 'Failed to update order status.' });
+    } finally {
+        client.release();
     }
 });
 
