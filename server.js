@@ -9,9 +9,12 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const pool = require('./db');
 const multer = require('multer');
 const fs = require('fs');
+const { put, del } = require('@vercel/blob');
+
+const isVercel = !!process.env.VERCEL;
 
 // Configure multer for file uploads
-const storage = multer.diskStorage({
+const storage = isVercel ? multer.memoryStorage() : multer.diskStorage({
     destination: (req, file, cb) => {
         let uploadDir = path.join(__dirname, 'public', 'images');
         const persistentDataDir = process.env.DATA_DIR || '/var/data';
@@ -193,7 +196,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             // Check if a user with this google_id already exists
             const { rows: googleRows } = await pool.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
             const existingByGoogle = googleRows[0];
-            
+
             if (existingByGoogle) {
                 await pool.query('UPDATE users SET avatar = $1 WHERE id = $2', [avatar, existingByGoogle.id]);
                 existingByGoogle.avatar = avatar;
@@ -201,7 +204,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             } else {
                 const { rows: emailRows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
                 const existingByEmail = emailRows[0];
-                
+
                 if (existingByEmail) {
                     await pool.query('UPDATE users SET google_id = $1, avatar = $2, auth_provider = $3 WHERE id = $4',
                         [googleId, avatar, 'google', existingByEmail.id]);
@@ -269,7 +272,7 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const { rows } = await pool.query('SELECT * FROM admins WHERE username = $1', [username]);
         const admin = rows[0];
-        
+
         if (!admin) {
             return res.status(401).json({ error: 'Invalid username or password.' });
         }
@@ -385,7 +388,7 @@ app.post('/api/user/login', async (req, res) => {
     try {
         const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
         const user = rows[0];
-        
+
         if (!user) {
             return res.status(401).json({ error: 'Invalid email or password.' });
         }
@@ -488,10 +491,10 @@ app.post('/api/orders', async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        
+
         // Check stock
         const { rows: dbProducts } = await client.query(`SELECT id, name, stock FROM products WHERE id IN (${placeholders})`, productIds);
-        
+
         const productMap = {};
         for (let p of dbProducts) {
             productMap[p.id] = p;
@@ -566,7 +569,7 @@ app.put('/api/admin/products/:id', requireAuth, (req, res, next) => {
     try {
         const { rows } = await pool.query('SELECT * FROM products WHERE id = $1', [productId]);
         const product = rows[0];
-        
+
         if (!product) {
             if (req.file) fs.unlink(req.file.path, () => { });
             return res.status(404).json({ error: 'Product not found.' });
@@ -600,7 +603,14 @@ app.put('/api/admin/products/:id', requireAuth, (req, res, next) => {
         let updatedImage = product.image;
         let oldImageToDelete = null;
         if (req.file) {
-            updatedImage = `images/${req.file.filename}`;
+            if (isVercel) {
+                const blob = await put(`products/${Date.now()}-${req.file.originalname}`, req.file.buffer, {
+                    access: 'public',
+                });
+                updatedImage = blob.url;
+            } else {
+                updatedImage = `images/${req.file.filename}`;
+            }
             oldImageToDelete = product.image;
         }
 
@@ -615,10 +625,14 @@ app.put('/api/admin/products/:id', requireAuth, (req, res, next) => {
         }
 
         if (oldImageToDelete && oldImageToDelete !== updatedImage) {
-            const absoluteImagePath = path.join(__dirname, 'public', oldImageToDelete);
-            fs.unlink(absoluteImagePath, (err) => {
-                if (err) console.warn('Could not delete old product image:', err.message);
-            });
+            if (oldImageToDelete.includes('public.blob.vercel-storage.com')) {
+                del(oldImageToDelete).catch(err => console.warn('Could not delete blob image:', err.message));
+            } else if (!isVercel) {
+                const absoluteImagePath = path.join(__dirname, 'public', oldImageToDelete);
+                fs.unlink(absoluteImagePath, (err) => {
+                    if (err) console.warn('Could not delete old product image:', err.message);
+                });
+            }
         }
 
         res.json({ success: true, message: 'Product updated successfully.' });
@@ -652,14 +666,22 @@ app.post('/api/admin/products', requireAuth, upload.single('photo'), async (req,
     if (stock !== undefined && stock !== '') {
         stockNum = parseInt(stock, 10);
         if (isNaN(stockNum) || stockNum < 0) {
-            fs.unlink(req.file.path, () => { });
+            if (req.file && !isVercel) fs.unlink(req.file.path, () => { });
             return res.status(400).json({ error: 'Valid stock level is required.' });
         }
     }
 
-    const imagePath = `images/${req.file.filename}`;
-
     try {
+        let imagePath;
+        if (isVercel) {
+            const blob = await put(`products/${Date.now()}-${req.file.originalname}`, req.file.buffer, {
+                access: 'public',
+            });
+            imagePath = blob.url;
+        } else {
+            imagePath = `images/${req.file.filename}`;
+        }
+
         const { rows } = await pool.query(
             `INSERT INTO products (name, origin, "desc", price, unit, badge, image, stock) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
             [name, origin, desc, priceNum, unit, badge || '', imagePath, stockNum]
@@ -685,10 +707,14 @@ app.delete('/api/admin/products/:id', requireAuth, async (req, res) => {
         }
 
         if (product.image) {
-            const absoluteImagePath = path.join(__dirname, 'public', product.image);
-            fs.unlink(absoluteImagePath, (err) => {
-                if (err) console.warn('Could not delete product image file:', err.message);
-            });
+            if (product.image.includes('public.blob.vercel-storage.com')) {
+                del(product.image).catch(err => console.warn('Could not delete blob image:', err.message));
+            } else if (!isVercel) {
+                const absoluteImagePath = path.join(__dirname, 'public', product.image);
+                fs.unlink(absoluteImagePath, (err) => {
+                    if (err) console.warn('Could not delete product image file:', err.message);
+                });
+            }
         }
 
         await pool.query('DELETE FROM products WHERE id = $1', [productId]);
@@ -745,7 +771,12 @@ app.put('/api/admin/orders/:id/status', requireAuth, async (req, res) => {
     }
 });
 
-// Start Server
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-});
+// Export the app for Vercel Serverless
+module.exports = app;
+
+// Only start the server locally or on Render
+if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+        console.log(`Server is running on http://localhost:${PORT}`);
+    });
+}
