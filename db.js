@@ -56,6 +56,16 @@ async function initDb() {
             )
         `);
 
+        // Create session table for connect-pg-simple
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS "session" (
+                "sid" varchar NOT NULL COLLATE "default" PRIMARY KEY,
+                "sess" json NOT NULL,
+                "expire" timestamp(6) NOT NULL
+            )
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire")`);
+
         // Create products table
         // Note: "desc" is a reserved word in PostgreSQL, so we quote it
         await client.query(`
