@@ -14,15 +14,16 @@ const { put, del } = require('@vercel/blob');
 
 const isVercel = !!process.env.VERCEL;
 
+const persistentDataDir = process.env.DATA_DIR || '/var/data';
+const usePersistentDisk = process.env.NODE_ENV === 'production'
+    || process.env.RENDER
+    || process.env.RENDER_SERVICE_ID
+    || process.env.DATA_DIR;
+
 // Configure multer for file uploads
 const storage = isVercel ? multer.memoryStorage() : multer.diskStorage({
     destination: (req, file, cb) => {
         let uploadDir = path.join(__dirname, 'public', 'images');
-        const persistentDataDir = process.env.DATA_DIR || '/var/data';
-        const usePersistentDisk = process.env.NODE_ENV === 'production'
-            || process.env.RENDER
-            || process.env.RENDER_SERVICE_ID
-            || process.env.DATA_DIR;
         if (usePersistentDisk) {
             const prodDir = path.join(persistentDataDir, 'images');
             try {
@@ -234,12 +235,6 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 } else {
     console.warn('⚠️ GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set. Google OAuth disabled.');
 }
-
-const persistentDataDir = process.env.DATA_DIR || '/var/data';
-const usePersistentDisk = process.env.NODE_ENV === 'production'
-    || process.env.RENDER
-    || process.env.RENDER_SERVICE_ID
-    || process.env.DATA_DIR;
 
 // Serve uploaded images from persistent disk (if available)
 if (usePersistentDisk) {
@@ -729,6 +724,7 @@ app.get('/api/admin/orders', requireAuth, async (req, res) => {
     const sql = `
         SELECT o.id, o.customer_name, o.customer_email, o.customer_address, o.total_amount, o.status, o.created_at,
                COALESCE(json_agg(json_build_object(
+                   'product_id', oi.product_id,
                    'product_name', oi.product_name,
                    'quantity', oi.quantity,
                    'price', oi.price

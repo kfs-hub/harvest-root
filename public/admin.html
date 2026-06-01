@@ -147,10 +147,27 @@
                             <button class="filter-btn" onclick="filterOrders('cancelled', this)">Cancelled</button>
                         </div>
                     </div>
-                    <div class="section-body">
-                        <div class="orders-list" id="orders-list">
-                            <div class="empty-state"><p>Loading orders...</p></div>
+                    <div class="section-body" style="padding: 0;">
+                        <div class="orders-table-wrapper">
+                            <table class="minimal-table">
+                                <thead>
+                                    <tr>
+                                        <th>Order ID</th>
+                                        <th>Date</th>
+                                        <th>Customer</th>
+                                        <th>Total</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="orders-list-tbody">
+                                    <tr>
+                                        <td colspan="6" class="empty-state">Loading orders...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
+                        <div class="orders-list" id="orders-list" style="display: none;"></div>
                     </div>
                 </div>
             </div>
@@ -307,6 +324,21 @@
                         <button type="submit" class="btn-submit-form" style="margin-top:0;">Save Changes</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Order Detail Modal -->
+    <div class="edit-modal-overlay" id="order-detail-modal">
+        <div class="edit-modal-card">
+            <div class="edit-modal-header">
+                <h2>Order Details <span id="detail-order-id" style="color:var(--text-light);font-size:1.1rem;margin-left:8px;font-family:var(--font-sans);font-weight:500;"></span></h2>
+                <button class="btn-close-modal" onclick="closeOrderModal()" aria-label="Close modal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="edit-modal-body" id="order-detail-modal-body">
+                <!-- Loaded dynamically by JS -->
             </div>
         </div>
     </div>

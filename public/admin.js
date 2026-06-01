@@ -201,21 +201,27 @@ function updateStats() {
 
 // ===== RENDER ORDERS =====
 function renderOrders() {
-    const container = document.getElementById('orders-list');
+    const tbody = document.getElementById('orders-list-tbody');
+    if (!tbody) return;
+
     const filtered = currentFilter === 'all'
         ? allOrders
         : allOrders.filter(o => o.status === currentFilter);
 
     if (filtered.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-                <p>${currentFilter === 'all' ? 'No orders yet.' : `No ${currentFilter} orders.`}</p>
-            </div>`;
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6">
+                    <div class="empty-state">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+                        <p>${currentFilter === 'all' ? 'No orders yet.' : `No ${currentFilter} orders.`}</p>
+                    </div>
+                </td>
+            </tr>`;
         return;
     }
 
-    container.innerHTML = filtered.map(o => {
+    tbody.innerHTML = filtered.map(o => {
         const date = new Date(o.created_at);
         const dateStr = date.toLocaleDateString('en-IN', {
             day: 'numeric', month: 'short', year: 'numeric'
@@ -224,50 +230,140 @@ function renderOrders() {
             hour: '2-digit', minute: '2-digit'
         });
 
-        const itemsHTML = (o.items && Array.isArray(o.items) && o.items.length > 0 && o.items[0].product_name)
-            ? o.items.filter(i => i && i.product_name).map(i => `
-                <div class="order-item-row">
-                    <span class="order-item-name">${i.product_name}</span>
-                    <span class="order-item-qty">×${i.quantity}</span>
-                    <span class="order-item-price">₹${(i.price * i.quantity).toLocaleString()}</span>
-                </div>
-            `).join('')
-            : '<div style="color:var(--text-muted);font-size:0.85rem;">No items</div>';
-
+        // Elegant minimal status label/badge
+        let statusBadgeClass = `status-badge ${o.status}`;
+        
         return `
-            <div class="order-card">
-                <div class="order-card-top">
-                    <span class="order-id">#${String(o.id).padStart(4, '0')}</span>
-                    <span class="order-date">${dateStr} · ${timeStr}</span>
-                    <span class="order-total">₹${(o.total_amount || 0).toLocaleString()}</span>
+            <tr onclick="openOrderModal(${o.id})" class="clickable-row">
+                <td class="td-order-id">#${String(o.id).padStart(4, '0')}</td>
+                <td class="td-order-date">${dateStr} <span class="td-order-time">${timeStr}</span></td>
+                <td class="td-order-customer">
+                    <div class="customer-info-cell">
+                        <span class="customer-name-cell">${o.customer_name}</span>
+                        <span class="customer-email-cell">${o.customer_email}</span>
+                    </div>
+                </td>
+                <td class="td-order-total">₹${(o.total_amount || 0).toLocaleString()}</td>
+                <td class="td-order-status">
+                    <span class="${statusBadgeClass}">${o.status}</span>
+                </td>
+                <td class="td-order-action" onclick="event.stopPropagation()">
                     <select onchange="updateOrderStatus(${o.id}, this.value)"
                             class="order-status-select ${o.status}">
                         <option value="pending" ${o.status === 'pending' ? 'selected' : ''}>Pending</option>
                         <option value="completed" ${o.status === 'completed' ? 'selected' : ''}>Completed</option>
                         <option value="cancelled" ${o.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
                     </select>
-                </div>
-                <div class="order-card-body">
-                    <div class="order-detail-block">
-                        <div class="order-detail-label">Customer</div>
-                        <div class="order-detail-value">
-                            <strong>${o.customer_name}</strong><br>
-                            <a href="mailto:${o.customer_email}">${o.customer_email}</a>
-                        </div>
-                    </div>
-                    <div class="order-detail-block">
-                        <div class="order-detail-label">Delivery Address</div>
-                        <div class="order-address">${o.customer_address}</div>
-                    </div>
-                    <div class="order-detail-block">
-                        <div class="order-detail-label">Items Ordered</div>
-                        <div class="order-detail-value">${itemsHTML}</div>
-                    </div>
-                </div>
-            </div>
+                </td>
+            </tr>
         `;
     }).join('');
 }
+
+// ===== ORDER DETAIL MODAL LOGIC =====
+const orderModal = document.getElementById('order-detail-modal');
+const orderModalBody = document.getElementById('order-detail-modal-body');
+const detailOrderId = document.getElementById('detail-order-id');
+
+function openOrderModal(orderId) {
+    const o = allOrders.find(order => order.id === orderId);
+    if (!o) return;
+
+    detailOrderId.textContent = `#${String(o.id).padStart(4, '0')}`;
+
+    const date = new Date(o.created_at);
+    const dateStr = date.toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    const itemsHTML = (o.items && Array.isArray(o.items) && o.items.length > 0 && o.items[0].product_name)
+        ? o.items.filter(i => i && i.product_name).map(i => {
+            // Find the product by ID or Name for maximum robustness
+            const product = allProducts.find(p => 
+                (i.product_id && p.id == i.product_id) || 
+                (p.name && i.product_name && p.name.toLowerCase() === i.product_name.toLowerCase())
+            );
+            const imgPath = product ? `../${product.image}` : '../images/harvest root logo.png';
+            
+            return `
+                <div class="modal-order-item">
+                    <img src="${imgPath}" alt="${i.product_name}" class="modal-item-img" onerror="this.src='../images/harvest root logo.png'">
+                    <div class="modal-item-details">
+                        <div class="modal-item-name">${i.product_name}</div>
+                        <div class="modal-item-meta">₹${i.price} × ${i.quantity}</div>
+                    </div>
+                    <div class="modal-item-total">₹${(i.price * i.quantity).toLocaleString()}</div>
+                </div>
+            `;
+        }).join('')
+        : '<div class="empty-items-state">No items found in this order.</div>';
+
+    orderModalBody.innerHTML = `
+        <div class="order-detail-grid">
+            <div class="order-info-section">
+                <div class="detail-group">
+                    <span class="detail-label">Customer Info</span>
+                    <div class="detail-value-card">
+                        <div class="customer-name">${o.customer_name}</div>
+                        <div class="customer-email"><a href="mailto:${o.customer_email}">${o.customer_email}</a></div>
+                        <div class="order-timestamp">Ordered on ${dateStr}</div>
+                    </div>
+                </div>
+                
+                <div class="detail-group" style="margin-top: 20px;">
+                    <span class="detail-label">Shipping Address</span>
+                    <div class="detail-value-card address-card">
+                        ${o.customer_address}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="order-items-section">
+                <span class="detail-label">Order Items</span>
+                <div class="modal-items-list">
+                    ${itemsHTML}
+                </div>
+                
+                <div class="modal-order-total-row">
+                    <span>Order Total</span>
+                    <span class="modal-total-amount">₹${(o.total_amount || 0).toLocaleString()}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="order-status-management">
+            <div class="status-manage-left">
+                <span class="detail-label">Current Status: <strong class="status-text ${o.status}">${o.status.toUpperCase()}</strong></span>
+            </div>
+            <div class="status-manage-actions">
+                <label for="modal-status-select" style="margin-right: 8px; font-size: 0.8rem; font-weight:600; text-transform: uppercase; color: var(--text-light);">Change Status:</label>
+                <select id="modal-status-select" class="order-status-select ${o.status}" onchange="updateOrderStatusFromModal(${o.id}, this.value)">
+                    <option value="pending" ${o.status === 'pending' ? 'selected' : ''}>Pending</option>
+                    <option value="completed" ${o.status === 'completed' ? 'selected' : ''}>Completed</option>
+                    <option value="cancelled" ${o.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+                </select>
+            </div>
+        </div>
+    `;
+
+    orderModal.classList.add('open');
+}
+
+function closeOrderModal() {
+    if (orderModal) {
+        orderModal.classList.remove('open');
+    }
+}
+
+async function updateOrderStatusFromModal(id, status) {
+    await updateOrderStatus(id, status);
+    // Refresh modal with updated details
+    const o = allOrders.find(order => order.id === id);
+    if (o) {
+        openOrderModal(id);
+    }
+}
+
 
 // ===== FILTER ORDERS =====
 function filterOrders(filter, btn) {

@@ -1,6 +1,6 @@
 # Harvest Root – Premium Spices from Coorg
 
- **Harvest Root** is a modern full‑stack web shop for premium Coorg spices. Built with **Node.js**, **Express**, **SQLite**, and a clean vanilla‑JS front‑end.
+ **Harvest Root** is a modern full‑stack web shop for premium Coorg spices. Built with **Node.js**, **Express**, **PostgreSQL**, and a clean vanilla‑JS front‑end.
 
 ## Features
 - Beautiful product catalogue with local images
@@ -10,7 +10,7 @@
 - Order status management (pending / completed / cancelled)
 
 ## Tech Stack
-- **Backend:** Node.js v20, Express, SQLite3
+- **Backend:** Node.js v20, Express, PostgreSQL
 - **Frontend:** HTML / CSS / Vanilla JavaScript
 - **Styling:** Google Fonts (Inter, Playfair Display), custom CSS with a dark‑green theme
 
@@ -41,7 +41,7 @@ Open `http://localhost:3000` in your browser.
   script.js
   admin.js
 /server.js     # Express server & API routes
-/db.js         # SQLite init
+/db.js         # PostgreSQL connection pool init
 /package.json
 ```
 
