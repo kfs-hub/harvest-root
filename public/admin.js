@@ -235,19 +235,19 @@ function renderOrders() {
         
         return `
             <tr onclick="openOrderModal(${o.id})" class="clickable-row">
-                <td class="td-order-id">#${String(o.id).padStart(4, '0')}</td>
-                <td class="td-order-date">${dateStr} <span class="td-order-time">${timeStr}</span></td>
-                <td class="td-order-customer">
+                <td class="td-order-id" data-label="Order">#${String(o.id).padStart(4, '0')}</td>
+                <td class="td-order-date" data-label="Date">${dateStr} <span class="td-order-time">${timeStr}</span></td>
+                <td class="td-order-customer" data-label="Customer">
                     <div class="customer-info-cell">
                         <span class="customer-name-cell">${o.customer_name}</span>
                         <span class="customer-email-cell">${o.customer_email}</span>
                     </div>
                 </td>
-                <td class="td-order-total">₹${(o.total_amount || 0).toLocaleString()}</td>
-                <td class="td-order-status">
+                <td class="td-order-total" data-label="Total">₹${(o.total_amount || 0).toLocaleString()}</td>
+                <td class="td-order-status" data-label="Status">
                     <span class="${statusBadgeClass}">${o.status}</span>
                 </td>
-                <td class="td-order-action" onclick="event.stopPropagation()">
+                <td class="td-order-action" data-label="" onclick="event.stopPropagation()">
                     <select onchange="updateOrderStatus(${o.id}, this.value)"
                             class="order-status-select ${o.status}">
                         <option value="pending" ${o.status === 'pending' ? 'selected' : ''}>Pending</option>
