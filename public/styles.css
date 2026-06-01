@@ -2279,6 +2279,25 @@ img {
   color: var(--text-light);
 }
 
+/* Glass override for Browse Spices button in empty cart */
+.cart-empty .btn-primary {
+  background: rgba(41, 83, 55, 0.78);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 24px rgba(41, 83, 55, 0.22),
+              inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.cart-empty .btn-primary:hover {
+  background: rgba(31, 63, 42, 0.88);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 36px rgba(41, 83, 55, 0.3),
+              inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
 /* Cart items (Tech Spec Card Style - Light Theme) */
 .cart-item {
   display: flex;
@@ -2543,21 +2562,53 @@ img {
   letter-spacing: 1px;
   padding: 18px;
   border-radius: 12px;
-  background: var(--green);
+  background: rgba(41, 83, 55, 0.8);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
   color: var(--white);
-  transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 28px rgba(41, 83, 55, 0.25),
+              inset 0 1px 0 rgba(255, 255, 255, 0.18);
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Shimmer sweep */
+.cart-checkout-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 40%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.1) 60%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+  pointer-events: none;
 }
 
 .cart-checkout-btn:hover {
   gap: 14px;
-  background: #1f3f2a;
+  background: rgba(31, 63, 42, 0.9);
+  border-color: rgba(255, 255, 255, 0.22);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(41, 83, 55, 0.25);
+  box-shadow: 0 14px 36px rgba(41, 83, 55, 0.35),
+              inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.cart-checkout-btn:hover::before {
+  transform: translateX(100%);
 }
 
 .cart-checkout-btn svg {
+  position: relative;
+  z-index: 1;
   transition: transform 0.3s ease;
 }
 
@@ -2565,26 +2616,36 @@ img {
   transform: translateX(6px);
 }
 
+.cart-checkout-btn span {
+  position: relative;
+  z-index: 1;
+}
+
 .cart-clear-btn {
   display: block;
   width: 100%;
-  margin-top: 16px;
-  background: none;
-  border: none;
+  margin-top: 12px;
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(200, 180, 160, 0.35);
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.75rem;
   color: var(--text-light);
   text-align: center;
   letter-spacing: 1px;
   text-transform: uppercase;
-  padding: 8px;
-  transition: color 0.2s ease;
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  padding: 9px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: all 0.25s ease;
 }
 
 .cart-clear-btn:hover {
+  background: rgba(255, 77, 77, 0.08);
+  border-color: rgba(255, 77, 77, 0.3);
   color: #ff4d4d;
+  box-shadow: 0 2px 12px rgba(255, 77, 77, 0.1), inset 0 1px 0 rgba(255,255,255,0.5);
 }
 
 /* ===== TOAST (Floating Notification) ===== */
