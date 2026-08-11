@@ -104,6 +104,8 @@ async function sendOTPEmail(toEmail, toName, otpCode) {
             throw new Error('Email transporter could not be initialized: ' + err.message);
         }
     }
+
+    const mailOptions = {
         from: `"Harvest Root" <${emailUser || 'no-reply@harvestroot.com'}>`,
         to: toEmail,
         subject: `${otpCode} is your Harvest Root verification code`,
@@ -125,10 +127,6 @@ async function sendOTPEmail(toEmail, toName, otpCode) {
             </div>
         `
     };
-
-    if (!transporter) {
-        throw new Error('Email transporter not ready');
-    }
     const info = await transporter.sendMail(mailOptions);
     const previewUrl = nodemailer.getTestMessageUrl(info);
     if (previewUrl) {
