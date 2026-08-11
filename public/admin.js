@@ -2,6 +2,7 @@
 let allOrders = [];
 let allContacts = [];
 let allProducts = [];
+let allEmployees = [];
 let currentFilter = 'all';
 let isAuthenticated = false;
 
@@ -24,6 +25,16 @@ function showDashboard(username) {
     isAuthenticated = true;
     loginOverlay.classList.add('hidden');
     document.getElementById('admin-username-display').textContent = username || 'Admin';
+
+    // Hide the "Create Employee Account" panel if logged in as a Manager (employee), not master admin ('admin')
+    const createEmpPanel = document.getElementById('create-employee-panel');
+    if (createEmpPanel) {
+        if (username === 'admin') {
+            createEmpPanel.style.display = 'block';
+        } else {
+            createEmpPanel.style.display = 'none';
+        }
+    }
 }
 
 function showLogin() {
@@ -41,6 +52,8 @@ async function checkAuth() {
             fetchOrders();
             fetchContacts();
             fetchProducts();
+            fetchEmployees();
+            fetchPasswordRequests();
         } else {
             showLogin();
         }
@@ -73,6 +86,8 @@ loginForm.addEventListener('submit', async (e) => {
             fetchOrders();
             fetchContacts();
             fetchProducts();
+            fetchEmployees();
+            fetchPasswordRequests();
         } else {
             showLoginError(data.error || 'Login failed.');
         }
@@ -97,6 +112,7 @@ async function handleLogout() {
     allOrders = [];
     allContacts = [];
     allProducts = [];
+    allEmployees = [];
     updateStats();
 }
 
@@ -127,15 +143,19 @@ overlay.addEventListener('click', () => {
 function switchTab(tabId) {
     // Update nav items
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-    event.currentTarget.classList.add('active');
+    const targetBtn = document.querySelector(`button[onclick*="${tabId}"]`);
+    if (targetBtn) {
+        targetBtn.classList.add('active');
+    }
 
     // Update panels
     document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
-    document.getElementById(`${tabId}-panel`).classList.add('active');
+    const panel = document.getElementById(`${tabId}-panel`);
+    if (panel) panel.classList.add('active');
 
     // Update topbar title
-    document.getElementById('topbar-title').textContent =
-        tabId === 'orders' ? 'Orders' : (tabId === 'contacts' ? 'Messages' : 'Products');
+    const titles = { orders: 'Orders', contacts: 'Messages', products: 'Products', employees: 'Employee Management' };
+    document.getElementById('topbar-title').textContent = titles[tabId] || tabId;
 
     // Close mobile sidebar
     sidebar.classList.remove('open');
@@ -618,6 +638,249 @@ if (addProductForm) {
             alert('Network error. Failed to add product.');
         }
     });
+}
+
+// ===== EMPLOYEE MANAGEMENT =====
+let allEmployeesFetched = false;
+
+async function fetchEmployees() {
+    try {
+        const res = await authFetch('/api/admin/employees');
+        const data = await res.json();
+        allEmployees = data.employees || [];
+        allEmployeesFetched = true;
+        const badge = document.getElementById('employees-count-badge');
+        if (badge) badge.textContent = allEmployees.length;
+        renderEmployees();
+    } catch (err) {
+        const tbody = document.getElementById('employees-list-tbody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Error loading employees.</td></tr>';
+    }
+}
+
+function renderEmployees() {
+    const tbody = document.getElementById('employees-list-tbody');
+    if (!tbody) return;
+
+    if (allEmployees.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5">
+                    <div class="empty-state">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                        <p>No employees yet. Create one above.</p>
+                    </div>
+                </td>
+            </tr>`;
+        return;
+    }
+
+    tbody.innerHTML = allEmployees.map(emp => {
+        const date = new Date(emp.created_at);
+        const dateStr = date.toLocaleDateString('en-IN', {
+            day: 'numeric', month: 'short', year: 'numeric'
+        });
+
+        const roleLabels = {
+            manager: '<span class="status-badge completed" style="text-transform:capitalize;">Manager</span>',
+            delivery: '<span class="status-badge pending" style="text-transform:capitalize;">Delivery</span>',
+            support: '<span class="status-badge" style="background:rgba(2,136,209,0.1);color:#0288d1;text-transform:capitalize;">Support</span>'
+        };
+        const roleHtml = roleLabels[emp.role] || `<span class="status-badge">${emp.role}</span>`;
+
+        return `
+            <tr>
+                <td data-label="ID">${emp.id}</td>
+                <td data-label="Username" style="font-weight:600;">${emp.username}</td>
+                <td data-label="Role">${roleHtml}</td>
+                <td data-label="Created">${dateStr}</td>
+                <td data-label="Action">
+                    <button class="btn-delete-product" onclick="deleteEmployee(${emp.id}, '${emp.username}')" title="Remove employee">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                        Remove
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function deleteEmployee(id, username) {
+    if (!confirm(`Are you sure you want to remove employee "${username}"? This cannot be undone.`)) return;
+
+    try {
+        const res = await authFetch(`/api/admin/employees/${id}`, {
+            method: 'DELETE'
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            alert('Employee removed successfully.');
+            fetchEmployees();
+        } else {
+            alert(data.error || 'Failed to remove employee.');
+        }
+    } catch (err) {
+        alert('Network error. Failed to remove employee.');
+    }
+}
+
+const addEmployeeForm = document.getElementById('add-employee-form');
+if (addEmployeeForm) {
+    addEmployeeForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const username = document.getElementById('new-emp-username').value.trim();
+        const password = document.getElementById('new-emp-password').value;
+        const role = document.getElementById('new-emp-role').value;
+
+        if (!username || !password || !role) {
+            alert('All fields are required.');
+            return;
+        }
+
+        try {
+            const res = await authFetch('/api/admin/employees', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password, role })
+            });
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                alert(`Employee "${username}" created successfully as ${role}!`);
+                addEmployeeForm.reset();
+                fetchEmployees();
+            } else {
+                alert(data.error || 'Failed to create employee.');
+            }
+        } catch (err) {
+            alert('Network error. Failed to create employee.');
+        }
+    });
+}
+
+
+// ===== PASSWORD RESET/CHANGE REQUESTS =====
+let allPasswordRequests = [];
+
+async function fetchPasswordRequests() {
+    try {
+        const res = await authFetch('/api/admin/password-requests');
+        const data = await res.json();
+        allPasswordRequests = data.requests || [];
+        renderPasswordRequests();
+    } catch (err) {
+        const tbody = document.getElementById('password-requests-tbody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Error loading password requests.</td></tr>';
+    }
+}
+
+function renderPasswordRequests() {
+    const tbody = document.getElementById('password-requests-tbody');
+    if (!tbody) return;
+
+    if (allPasswordRequests.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6">
+                    <div class="empty-state">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        <p>No password requests found.</p>
+                    </div>
+                </td>
+            </tr>`;
+        return;
+    }
+
+    tbody.innerHTML = allPasswordRequests.map(req => {
+        const date = new Date(req.created_at);
+        const dateStr = date.toLocaleString('en-IN', {
+            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+        });
+
+        // Request type badge
+        const typeHtml = req.request_type === 'forgot' 
+            ? '<span class="status-badge pending">Forgot Password</span>' 
+            : '<span class="status-badge" style="background:rgba(2,136,209,0.1);color:#0288d1;">Change Password</span>';
+
+        // Status badge
+        let statusHtml = '';
+        if (req.status === 'pending') {
+            statusHtml = '<span class="status-badge pending">Pending</span>';
+        } else if (req.status === 'approved') {
+            statusHtml = '<span class="status-badge completed">Approved</span>';
+        } else {
+            statusHtml = '<span class="status-badge cancelled" style="text-transform:capitalize;">' + req.status + '</span>';
+        }
+
+        // Actions
+        let actionsHtml = '';
+        if (req.status === 'pending') {
+            if (req.request_type === 'change') {
+                actionsHtml = `
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-refresh" style="background:#2e7d32; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:0.8rem; cursor:pointer;" onclick="resolvePasswordRequest(${req.id}, 'approve')">Approve</button>
+                        <button class="btn-delete-product" style="padding:4px 8px; font-size:0.8rem;" onclick="resolvePasswordRequest(${req.id}, 'reject')">Reject</button>
+                    </div>
+                `;
+            } else { // forgot
+                actionsHtml = `
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-refresh" style="background:#e65100; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:0.8rem; cursor:pointer;" onclick="resolvePasswordRequest(${req.id}, 'reset', '${req.username}')">Reset Pass</button>
+                        <button class="btn-delete-product" style="padding:4px 8px; font-size:0.8rem;" onclick="resolvePasswordRequest(${req.id}, 'reject')">Reject</button>
+                    </div>
+                `;
+            }
+        } else {
+            actionsHtml = '<span style="color:var(--text-light); font-size:0.85rem;">Resolved</span>';
+        }
+
+        return `
+            <tr>
+                <td data-label="ID">${req.id}</td>
+                <td data-label="Username" style="font-weight:600;">${req.username}</td>
+                <td data-label="Request Type">${typeHtml}</td>
+                <td data-label="Status">${statusHtml}</td>
+                <td data-label="Requested Date">${dateStr}</td>
+                <td data-label="Action">${actionsHtml}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function resolvePasswordRequest(requestId, action, username = '') {
+    let bodyData = { action };
+    
+    if (action === 'reset') {
+        const newPassword = prompt(`Enter a new password for employee "${username}" (min 6 characters):`);
+        if (newPassword === null) return; // User cancelled prompt
+        if (newPassword.length < 6) {
+            alert('Password must be at least 6 characters.');
+            return;
+        }
+        bodyData.newPassword = newPassword;
+    } else {
+        const confirmResolve = confirm(`Are you sure you want to ${action} this request?`);
+        if (!confirmResolve) return;
+    }
+
+    try {
+        const res = await authFetch(`/api/admin/password-requests/${requestId}/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyData)
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            alert('Request resolved successfully!');
+            fetchPasswordRequests();
+            fetchEmployees();
+        } else {
+            alert(data.error || 'Failed to resolve request.');
+        }
+    } catch (err) {
+        alert('Network error. Failed to resolve request.');
+    }
 }
 
 

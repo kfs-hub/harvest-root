@@ -253,16 +253,81 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Auth middleware — protects admin API routes
 function requireAuth(req, res, next) {
-    if (req.session && req.session.adminId) {
+    if (req.session && (req.session.employeeId || req.session.adminId)) {
         return next();
     }
     return res.status(401).json({ error: 'Unauthorized. Please log in.' });
 }
 
+// Role middleware - checks role of logged-in employee
+function requireRole(roles) {
+    return (req, res, next) => {
+        // If logged in via old admin session, treat as manager
+        if (req.session && req.session.adminId && !req.session.employeeRole) {
+            req.session.employeeRole = 'manager';
+            req.session.employeeId = req.session.adminId;
+            req.session.employeeUsername = req.session.adminUsername;
+        }
+
+        if (req.session && req.session.employeeRole && roles.includes(req.session.employeeRole)) {
+            return next();
+        }
+        return res.status(403).json({ error: 'Forbidden. Insufficient permissions.' });
+    };
+}
+
+// ===== RATE LIMITER (Login Protection) =====
+function createRateLimiter({ windowMs = 15 * 60 * 1000, maxAttempts = 5 } = {}) {
+    const attempts = new Map(); // key: IP, value: { count, firstAttempt }
+
+    // Cleanup stale entries every 10 minutes
+    setInterval(() => {
+        const now = Date.now();
+        for (const [ip, data] of attempts) {
+            if (now - data.firstAttempt > windowMs) {
+                attempts.delete(ip);
+            }
+        }
+    }, 10 * 60 * 1000).unref();
+
+    return (req, res, next) => {
+        const ip = req.ip || req.connection.remoteAddress || 'unknown';
+        const now = Date.now();
+        const record = attempts.get(ip);
+
+        if (record) {
+            // Reset if outside the window
+            if (now - record.firstAttempt > windowMs) {
+                attempts.set(ip, { count: 1, firstAttempt: now });
+                return next();
+            }
+
+            if (record.count >= maxAttempts) {
+                const retryAfter = Math.ceil((windowMs - (now - record.firstAttempt)) / 1000);
+                const retryMinutes = Math.ceil(retryAfter / 60);
+                res.set('Retry-After', String(retryAfter));
+                return res.status(429).json({
+                    error: `Too many login attempts. Please try again in ${retryMinutes} minute${retryMinutes > 1 ? 's' : ''}.`,
+                    retryAfter: retryAfter
+                });
+            }
+
+            record.count++;
+        } else {
+            attempts.set(ip, { count: 1, firstAttempt: now });
+        }
+
+        next();
+    };
+}
+
+// 5 attempts per 15 minutes for login routes
+const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, maxAttempts: 5 });
+
 // ===== AUTH ROUTES =====
 
-// Login
-app.post('/api/auth/login', async (req, res) => {
+// Login (Legacy Admin Login)
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
@@ -284,9 +349,56 @@ app.post('/api/auth/login', async (req, res) => {
 
         req.session.adminId = admin.id;
         req.session.adminUsername = admin.username;
+        
+        req.session.employeeId = admin.id;
+        req.session.employeeUsername = admin.username;
+        req.session.employeeRole = 'manager';
+
         res.json({ success: true, message: 'Login successful.', username: admin.username });
     } catch (err) {
         console.error('Login DB error:', err.message);
+        return res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// Employee Login
+app.post('/api/employee/login', loginLimiter, async (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password are required.' });
+    }
+
+    try {
+        const { rows } = await pool.query('SELECT * FROM employees WHERE username = $1', [username]);
+        const employee = rows[0];
+
+        if (!employee) {
+            return res.status(401).json({ error: 'Invalid username or password.' });
+        }
+
+        const match = await bcrypt.compare(password, employee.password_hash);
+        if (!match) {
+            return res.status(401).json({ error: 'Invalid username or password.' });
+        }
+
+        req.session.employeeId = employee.id;
+        req.session.employeeUsername = employee.username;
+        req.session.employeeRole = employee.role;
+
+        if (employee.role === 'manager') {
+            req.session.adminId = employee.id;
+            req.session.adminUsername = employee.username;
+        }
+
+        res.json({
+            success: true,
+            message: 'Login successful.',
+            username: employee.username,
+            role: employee.role
+        });
+    } catch (err) {
+        console.error('Employee login DB error:', err.message);
         return res.status(500).json({ error: 'Server error.' });
     }
 });
@@ -302,10 +414,32 @@ app.post('/api/auth/logout', (req, res) => {
     });
 });
 
+// Employee Logout
+app.post('/api/employee/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to logout.' });
+        }
+        res.clearCookie('connect.sid');
+        res.json({ success: true, message: 'Logged out.' });
+    });
+});
+
 // Check session
 app.get('/api/auth/check', (req, res) => {
+    if (req.session && req.session.employeeId) {
+        return res.json({ authenticated: true, username: req.session.employeeUsername, role: req.session.employeeRole });
+    }
     if (req.session && req.session.adminId) {
-        return res.json({ authenticated: true, username: req.session.adminUsername });
+        return res.json({ authenticated: true, username: req.session.adminUsername, role: 'manager' });
+    }
+    res.json({ authenticated: false });
+});
+
+// Employee Check session
+app.get('/api/employee/check', (req, res) => {
+    if (req.session && req.session.employeeId) {
+        return res.json({ authenticated: true, username: req.session.employeeUsername, role: req.session.employeeRole });
     }
     res.json({ authenticated: false });
 });
@@ -336,6 +470,115 @@ app.get('/api/auth/google/callback',
 
 // ===== USER (CUSTOMER) AUTH ROUTES =====
 
+// User Signup (Email + Password)
+app.post('/api/user/signup', async (req, res) => {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+        return res.status(400).json({ error: 'Name, email, and password are required.' });
+    }
+
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (cleanName.length < 2) {
+        return res.status(400).json({ error: 'Name must be at least 2 characters.' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+        return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+
+    if (password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+
+    try {
+        // Check if email already exists
+        const { rows: existing } = await pool.query('SELECT id, auth_provider FROM users WHERE email = $1', [cleanEmail]);
+        if (existing.length > 0) {
+            const provider = existing[0].auth_provider;
+            if (provider === 'google') {
+                return res.status(409).json({ error: 'This email is already registered with Google. Please use "Continue with Google" to sign in.' });
+            }
+            return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
+        }
+
+        const passwordHash = bcrypt.hashSync(password, 10);
+
+        // Insert user (unverified — OTP must be confirmed before session is granted)
+        await pool.query(
+            `INSERT INTO users (name, email, password_hash, auth_provider) VALUES ($1, $2, $3, 'local')
+             ON CONFLICT (email) DO NOTHING`,
+            [cleanName, cleanEmail, passwordHash]
+        );
+
+        // Generate and send OTP for email verification
+        const signupOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        const signupOtpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE email = $1 AND used = FALSE`, [cleanEmail]);
+        await pool.query(`INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)`, [cleanEmail, signupOtp, signupOtpExpiry]);
+        await sendOTPEmail(cleanEmail, cleanName, signupOtp);
+
+        res.status(201).json({ success: true, message: 'Account created! Please check your email for a verification code.' });
+    } catch (err) {
+        console.error('Signup error:', err.message);
+        return res.status(500).json({ error: 'Failed to create account. Please try again.' });
+    }
+});
+
+// User Login (Email + Password)
+app.post('/api/user/login', loginLimiter, async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    try {
+        const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [cleanEmail]);
+        const user = rows[0];
+
+        if (!user) {
+            return res.status(401).json({ error: 'No account found with this email. Please sign up.' });
+        }
+
+        if (user.auth_provider === 'google' && !user.password_hash) {
+            return res.status(401).json({ error: 'This email is registered with Google. Please use "Continue with Google" to sign in.' });
+        }
+
+        if (!user.password_hash) {
+            return res.status(401).json({ error: 'Invalid credentials.' });
+        }
+
+        const match = await bcrypt.compare(password, user.password_hash);
+        if (!match) {
+            return res.status(401).json({ error: 'Incorrect password. Please try again.' });
+        }
+
+        req.session.userId = user.id;
+        req.session.userName = user.name;
+        req.session.userEmail = user.email;
+
+        res.json({
+            success: true,
+            user: {
+                name: user.name,
+                email: user.email,
+                address: user.address || '',
+                avatar: user.avatar || '',
+                auth_provider: user.auth_provider || 'local'
+            }
+        });
+    } catch (err) {
+        console.error('User login error:', err.message);
+        return res.status(500).json({ error: 'Server error. Please try again.' });
+    }
+});
+
 // User Logout
 app.post('/api/user/logout', (req, res) => {
     req.session.destroy((err) => {
@@ -345,6 +588,142 @@ app.post('/api/user/logout', (req, res) => {
         res.clearCookie('connect.sid');
         res.json({ success: true });
     });
+});
+
+// User Verify OTP and complete login after signup
+app.post('/api/user/verify-and-login', async (req, res) => {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ error: 'Email and verification code are required.' });
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    try {
+        // Validate OTP
+        const { rows: otpRows } = await pool.query(
+            `SELECT * FROM otp_verifications
+             WHERE email = $1 AND otp_code = $2 AND used = FALSE AND expires_at > NOW()
+             ORDER BY created_at DESC LIMIT 1`,
+            [cleanEmail, otp]
+        );
+
+        if (otpRows.length === 0) {
+            return res.status(400).json({ error: 'Invalid or expired code. Please request a new one.' });
+        }
+
+        // Mark OTP as used
+        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE id = $1`, [otpRows[0].id]);
+
+        // Fetch user
+        const { rows: userRows } = await pool.query('SELECT * FROM users WHERE email = $1', [cleanEmail]);
+        const user = userRows[0];
+
+        if (!user) {
+            return res.status(404).json({ error: 'Account not found. Please sign up again.' });
+        }
+
+        // Establish session
+        req.session.userId = user.id;
+        req.session.userName = user.name;
+        req.session.userEmail = user.email;
+
+        res.json({
+            success: true,
+            user: {
+                name: user.name,
+                email: user.email,
+                address: user.address || '',
+                avatar: user.avatar || '',
+                auth_provider: user.auth_provider || 'local'
+            }
+        });
+    } catch (err) {
+        console.error('Verify-and-login error:', err.message);
+        return res.status(500).json({ error: 'Verification failed. Please try again.' });
+    }
+});
+
+// User Forgot Password — send OTP to email
+app.post('/api/user/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    try {
+        const { rows } = await pool.query('SELECT id, name, auth_provider, password_hash FROM users WHERE email = $1', [cleanEmail]);
+        const user = rows[0];
+
+        // Always respond with success to prevent email enumeration
+        if (!user || (user.auth_provider === 'google' && !user.password_hash)) {
+            return res.json({ success: true, message: 'If an account exists, a reset code has been sent to your email.' });
+        }
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+        // Invalidate any existing OTPs for this email
+        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE email = $1 AND used = FALSE`, [cleanEmail]);
+
+        // Store new OTP
+        await pool.query(
+            `INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)`,
+            [cleanEmail, otp, expiresAt]
+        );
+
+        await sendOTPEmail(cleanEmail, user.name, otp);
+
+        res.json({ success: true, message: 'If an account exists, a reset code has been sent to your email.' });
+    } catch (err) {
+        console.error('Forgot password error:', err.message);
+        return res.status(500).json({ error: 'Failed to send reset code. Please try again.' });
+    }
+});
+
+// User Reset Password — verify OTP + set new password
+app.post('/api/user/reset-password', async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+        return res.status(400).json({ error: 'Email, verification code, and new password are required.' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (newPassword.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+
+    try {
+        // Validate OTP
+        const { rows: otpRows } = await pool.query(
+            `SELECT * FROM otp_verifications
+             WHERE email = $1 AND otp_code = $2 AND used = FALSE AND expires_at > NOW()
+             ORDER BY created_at DESC LIMIT 1`,
+            [cleanEmail, otp]
+        );
+
+        if (otpRows.length === 0) {
+            return res.status(400).json({ error: 'Invalid or expired code. Please request a new one.' });
+        }
+
+        // Mark OTP as used
+        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE id = $1`, [otpRows[0].id]);
+
+        // Update password
+        const newHash = bcrypt.hashSync(newPassword, 10);
+        const result = await pool.query(
+            `UPDATE users SET password_hash = $1 WHERE email = $2`,
+            [newHash, cleanEmail]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Account not found.' });
+        }
+
+        res.json({ success: true, message: 'Password reset successfully. You can now sign in.' });
+    } catch (err) {
+        console.error('Reset password error:', err.message);
+        return res.status(500).json({ error: 'Failed to reset password. Please try again.' });
+    }
 });
 
 // User Check Session
@@ -540,7 +919,7 @@ app.get('/api/products', async (req, res) => {
 });
 
 // 2.6. Admin: Update product details
-app.put('/api/admin/products/:id', requireAuth, (req, res, next) => {
+app.put('/api/admin/products/:id', requireAuth, requireRole(['manager']), (req, res, next) => {
     const contentType = req.headers['content-type'] || '';
     if (contentType.includes('application/json')) {
         return next();
@@ -628,7 +1007,7 @@ app.put('/api/admin/products/:id', requireAuth, (req, res, next) => {
 });
 
 // 2.7. Admin: Add new product
-app.post('/api/admin/products', requireAuth, upload.single('photo'), async (req, res) => {
+app.post('/api/admin/products', requireAuth, requireRole(['manager']), upload.single('photo'), async (req, res) => {
     const { name, origin, desc, price, unit, badge, stock } = req.body;
 
     if (!req.file) {
@@ -679,7 +1058,7 @@ app.post('/api/admin/products', requireAuth, upload.single('photo'), async (req,
 });
 
 // 2.8. Admin: Delete product
-app.delete('/api/admin/products/:id', requireAuth, async (req, res) => {
+app.delete('/api/admin/products/:id', requireAuth, requireRole(['manager']), async (req, res) => {
     const productId = req.params.id;
 
     try {
@@ -710,7 +1089,7 @@ app.delete('/api/admin/products/:id', requireAuth, async (req, res) => {
 });
 
 // 3. Admin: Get all contacts
-app.get('/api/admin/contacts', requireAuth, async (req, res) => {
+app.get('/api/admin/contacts', requireAuth, requireRole(['manager', 'support']), async (req, res) => {
     try {
         const { rows } = await pool.query('SELECT * FROM contacts ORDER BY created_at DESC');
         res.json({ contacts: rows });
@@ -720,7 +1099,7 @@ app.get('/api/admin/contacts', requireAuth, async (req, res) => {
 });
 
 // 4. Admin: Get all orders with items
-app.get('/api/admin/orders', requireAuth, async (req, res) => {
+app.get('/api/admin/orders', requireAuth, requireRole(['manager', 'delivery']), async (req, res) => {
     const sql = `
         SELECT o.id, o.customer_name, o.customer_email, o.customer_address, o.total_amount, o.status, o.created_at,
                COALESCE(json_agg(json_build_object(
@@ -745,7 +1124,7 @@ app.get('/api/admin/orders', requireAuth, async (req, res) => {
 });
 
 // 5. Admin: Update order status
-app.put('/api/admin/orders/:id/status', requireAuth, async (req, res) => {
+app.put('/api/admin/orders/:id/status', requireAuth, requireRole(['manager', 'delivery']), async (req, res) => {
     const orderId = req.params.id;
     const { status } = req.body;
     const client = await pool.connect();
@@ -793,6 +1172,250 @@ app.put('/api/admin/orders/:id/status', requireAuth, async (req, res) => {
         await client.query('ROLLBACK');
         console.error('Error updating order status:', err.message);
         return res.status(500).json({ error: 'Failed to update order status.' });
+    } finally {
+        client.release();
+    }
+});
+
+// ===== EMPLOYEE MANAGEMENT (MANAGER ONLY) =====
+
+// 6. Manager: Get all employees
+app.get('/api/admin/employees', requireAuth, requireRole(['manager']), async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT id, username, role, created_at FROM employees ORDER BY created_at DESC');
+        res.json({ employees: rows });
+    } catch (err) {
+        console.error('Error fetching employees:', err.message);
+        return res.status(500).json({ error: 'Failed to fetch employees.' });
+    }
+});
+
+// 7. Manager: Create a new employee
+app.post('/api/admin/employees', requireAuth, requireRole(['manager']), async (req, res) => {
+    const isMasterAdmin = (req.session.adminUsername === 'admin' || req.session.employeeUsername === 'admin');
+    if (!isMasterAdmin) {
+        return res.status(403).json({ error: 'Forbidden. Only the master admin can manage employees.' });
+    }
+    const { username, password, role } = req.body;
+
+    if (!username || !password || !role) {
+        return res.status(400).json({ error: 'Username, password, and role are required.' });
+    }
+
+    const trimmedUsername = username.trim().toLowerCase();
+    const trimmedRole = role.trim().toLowerCase();
+
+    if (!['manager', 'delivery', 'support'].includes(trimmedRole)) {
+        return res.status(400).json({ error: 'Role must be manager, delivery, or support.' });
+    }
+
+    if (trimmedUsername.length < 3) {
+        return res.status(400).json({ error: 'Username must be at least 3 characters.' });
+    }
+
+    if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
+
+    try {
+        // Check if username already exists
+        const { rows: existing } = await pool.query('SELECT id FROM employees WHERE username = $1', [trimmedUsername]);
+        if (existing.length > 0) {
+            return res.status(409).json({ error: 'An employee with this username already exists.' });
+        }
+
+        const hash = bcrypt.hashSync(password, 10);
+        const { rows } = await pool.query(
+            'INSERT INTO employees (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id',
+            [trimmedUsername, hash, trimmedRole]
+        );
+        res.status(201).json({ success: true, message: 'Employee created successfully.', id: rows[0].id });
+    } catch (err) {
+        console.error('Error creating employee:', err.message);
+        return res.status(500).json({ error: 'Failed to create employee.' });
+    }
+});
+
+// 8. Manager: Delete an employee
+app.delete('/api/admin/employees/:id', requireAuth, requireRole(['manager']), async (req, res) => {
+    const isMasterAdmin = (req.session.adminUsername === 'admin' || req.session.employeeUsername === 'admin');
+    if (!isMasterAdmin) {
+        return res.status(403).json({ error: 'Forbidden. Only the master admin can manage employees.' });
+    }
+    const employeeId = req.params.id;
+
+    try {
+        // Prevent deleting yourself
+        if (req.session.employeeId && parseInt(employeeId) === req.session.employeeId) {
+            return res.status(400).json({ error: 'You cannot delete your own account.' });
+        }
+
+        const result = await pool.query('DELETE FROM employees WHERE id = $1', [employeeId]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Employee not found.' });
+        }
+        res.json({ success: true, message: 'Employee removed successfully.' });
+    } catch (err) {
+        console.error('Error deleting employee:', err.message);
+        return res.status(500).json({ error: 'Failed to delete employee.' });
+    }
+});
+
+// ===== EMPLOYEE PASSWORD REQUESTS =====
+
+// 1. Submit reset request (Forgot Password - Public)
+app.post('/api/employee/request-reset', async (req, res) => {
+    const { username } = req.body;
+    if (!username) {
+        return res.status(400).json({ error: 'Username is required.' });
+    }
+    const cleanUsername = username.trim().toLowerCase();
+
+    try {
+        // Validate employee exists
+        const { rows } = await pool.query('SELECT id FROM employees WHERE username = $1', [cleanUsername]);
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'No employee account found with this username.' });
+        }
+
+        // Check if there is already a pending request to prevent spam
+        const { rows: pending } = await pool.query(
+            "SELECT id FROM employee_password_requests WHERE username = $1 AND status = 'pending' AND request_type = 'forgot'",
+            [cleanUsername]
+        );
+        if (pending.length > 0) {
+            return res.status(409).json({ error: 'A password reset request is already pending approval from the Manager.' });
+        }
+
+        await pool.query(
+            "INSERT INTO employee_password_requests (username, request_type) VALUES ($1, 'forgot')",
+            [cleanUsername]
+        );
+
+        res.json({ success: true, message: 'Password reset request sent to the Manager successfully.' });
+    } catch (err) {
+        console.error('Error submitting password reset request:', err.message);
+        return res.status(500).json({ error: 'Server error. Failed to submit request.' });
+    }
+});
+
+// 2. Submit change request (Change Password - Authenticated)
+app.post('/api/employee/request-change', requireAuth, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: 'Current password and new password are required.' });
+    }
+    if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    }
+
+    const employeeId = req.session.employeeId;
+    const employeeUsername = req.session.employeeUsername;
+
+    try {
+        // Get employee password hash
+        const { rows } = await pool.query('SELECT password_hash FROM employees WHERE id = $1', [employeeId]);
+        if (rows.length === 0) {
+            // Also check old admin session table if needed
+            const { rows: adminRows } = await pool.query('SELECT password_hash FROM admins WHERE id = $1', [employeeId]);
+            if (adminRows.length === 0) {
+                return res.status(404).json({ error: 'Account not found.' });
+            }
+            rows.push(adminRows[0]);
+        }
+
+        const match = await bcrypt.compare(currentPassword, rows[0].password_hash);
+        if (!match) {
+            return res.status(401).json({ error: 'Incorrect current password.' });
+        }
+
+        // Insert password change request
+        const newHash = bcrypt.hashSync(newPassword, 10);
+        await pool.query(
+            "INSERT INTO employee_password_requests (username, request_type, new_password_hash) VALUES ($1, 'change', $2)",
+            [employeeUsername, newHash]
+        );
+
+        res.json({ success: true, message: 'Password change request submitted for Manager approval.' });
+    } catch (err) {
+        console.error('Error submitting password change request:', err.message);
+        return res.status(500).json({ error: 'Server error. Failed to submit request.' });
+    }
+});
+
+// 3. Manager: Get all password requests
+app.get('/api/admin/password-requests', requireAuth, requireRole(['manager']), async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT * FROM employee_password_requests ORDER BY created_at DESC');
+        res.json({ requests: rows });
+    } catch (err) {
+        console.error('Error fetching password requests:', err.message);
+        return res.status(500).json({ error: 'Failed to fetch password requests.' });
+    }
+});
+
+// 4. Manager: Resolve a password request
+app.post('/api/admin/password-requests/:id/resolve', requireAuth, requireRole(['manager']), async (req, res) => {
+    const isMasterAdmin = (req.session.adminUsername === 'admin' || req.session.employeeUsername === 'admin');
+    if (!isMasterAdmin) {
+        return res.status(403).json({ error: 'Forbidden. Only the master admin can resolve password requests.' });
+    }
+    const requestId = req.params.id;
+    const { action, newPassword } = req.body; // 'approve', 'reject', 'reset'
+
+    if (!['approve', 'reject', 'reset'].includes(action)) {
+        return res.status(400).json({ error: 'Invalid action. Must be approve, reject, or reset.' });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Fetch the request
+        const { rows } = await client.query('SELECT * FROM employee_password_requests WHERE id = $1', [requestId]);
+        const request = rows[0];
+
+        if (!request) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Request not found.' });
+        }
+
+        if (request.status !== 'pending') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Request has already been resolved.' });
+        }
+
+        if (action === 'approve') {
+            if (request.request_type !== 'change') {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: 'Approval is only valid for change password requests.' });
+            }
+            // Update employee password
+            await client.query('UPDATE employees SET password_hash = $1 WHERE username = $2', [request.new_password_hash, request.username]);
+            await client.query("UPDATE employee_password_requests SET status = 'approved' WHERE id = $1", [requestId]);
+        } else if (action === 'reject') {
+            await client.query("UPDATE employee_password_requests SET status = 'rejected' WHERE id = $1", [requestId]);
+        } else if (action === 'reset') {
+            if (request.request_type !== 'forgot') {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: 'Reset is only valid for forgot password requests.' });
+            }
+            if (!newPassword || newPassword.length < 6) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: 'A valid password of at least 6 characters is required.' });
+            }
+            // Generate hash and update employee
+            const newHash = bcrypt.hashSync(newPassword, 10);
+            await client.query('UPDATE employees SET password_hash = $1 WHERE username = $2', [newHash, request.username]);
+            await client.query("UPDATE employee_password_requests SET status = 'approved' WHERE id = $1", [requestId]);
+        }
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: `Request successfully resolved as ${action}.` });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Error resolving password request:', err.message);
+        return res.status(500).json({ error: 'Server error. Failed to resolve request.' });
     } finally {
         client.release();
     }

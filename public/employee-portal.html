@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Harvest Root — Staff Portal</title>
+  <meta name="description" content="Access the secure employee login portals for Harvest Root management, logistics, and support.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .portal-main-section {
+      padding: 140px 24px 80px 24px;
+      min-height: calc(100vh - 350px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+    }
+
+    .portal-container {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .portal-header {
+      margin-bottom: 3.5rem;
+    }
+
+    .portal-title {
+      font-family: var(--font-serif);
+      font-size: clamp(2rem, 4vw, 3rem);
+      color: var(--text);
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .portal-title em {
+      font-style: italic;
+      color: var(--green);
+    }
+
+    .portal-subtitle {
+      color: var(--text-light);
+      font-size: 1.05rem;
+      max-width: 580px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* Grid Layout */
+    .portal-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+      margin-bottom: 3rem;
+    }
+
+    /* Portal Card styling */
+    .portal-card {
+      background: var(--white);
+      border: 1px solid var(--sand);
+      border-radius: 16px;
+      padding: 40px 30px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: var(--transition);
+      cursor: pointer;
+      text-decoration: none;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .portal-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--sand);
+      transition: var(--transition);
+    }
+
+    /* Role specific themes */
+    .portal-card.manager::before { background: var(--green); }
+    .portal-card.delivery::before { background: var(--gold-light); }
+    .portal-card.support::before { background: #3a8d99; }
+
+    .portal-card:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .portal-card.manager:hover { border-color: var(--green); }
+    .portal-card.delivery:hover { border-color: var(--gold-light); }
+    .portal-card.support:hover { border-color: #3a8d99; }
+
+    .icon-wrapper {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      background: var(--cream);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+      transition: var(--transition);
+      color: var(--text-light);
+      border: 1px solid var(--sand);
+    }
+
+    .portal-card.manager:hover .icon-wrapper {
+      background: rgba(41, 83, 55, 0.08);
+      color: var(--green);
+      border-color: rgba(41, 83, 55, 0.2);
+    }
+
+    .portal-card.delivery:hover .icon-wrapper {
+      background: rgba(218, 168, 78, 0.08);
+      color: var(--gold-light);
+      border-color: rgba(218, 168, 78, 0.2);
+    }
+
+    .portal-card.support:hover .icon-wrapper {
+      background: rgba(58, 141, 153, 0.08);
+      color: #3a8d99;
+      border-color: rgba(58, 141, 153, 0.2);
+    }
+
+    .icon-wrapper svg {
+      width: 28px;
+      height: 28px;
+      stroke: currentColor;
+      transition: var(--transition);
+    }
+
+    .portal-card:hover .icon-wrapper svg {
+      transform: scale(1.08);
+    }
+
+    .card-title {
+      font-family: var(--font-serif);
+      font-size: 1.45rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    .card-desc {
+      color: var(--text-light);
+      font-size: 0.92rem;
+      line-height: 1.6;
+      margin-bottom: 28px;
+      min-height: 70px;
+    }
+
+    .portal-btn {
+      width: 100%;
+      padding: 12px 24px;
+      border-radius: 50px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-align: center;
+      background: transparent;
+      border: 1.5px solid var(--sand);
+      color: var(--text-light);
+      transition: var(--transition);
+    }
+
+    .portal-card.manager:hover .portal-btn {
+      background: var(--green);
+      border-color: var(--green);
+      color: var(--white);
+    }
+
+    .portal-card.delivery:hover .portal-btn {
+      background: var(--gold-light);
+      border-color: var(--gold-light);
+      color: var(--white);
+    }
+
+    .portal-card.support:hover .portal-btn {
+      background: #3a8d99;
+      border-color: #3a8d99;
+      color: var(--white);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav class="navbar scrolled" id="navbar">
+      <div class="nav-container">
+          <a href="index.html" class="nav-logo" id="nav-logo">
+              <span class="logo-icon"> <img src="images/harvest root logo.png" alt="Company Logo" width="70"></span>
+              <span class="logo-text">Harvest Root</span>
+          </a>
+          <ul class="nav-links" id="nav-links">
+              <li><a href="index.html#home" class="nav-link">Home</a></li>
+              <li><a href="index.html#story" class="nav-link">Our Story</a></li>
+              <li><a href="index.html#products" class="nav-link">Shop</a></li>
+              <li><a href="index.html#contact" class="nav-link">Contact</a></li>
+              <li><a href="employee-portal.html" class="nav-link active">Staff Portal</a></li>
+          </ul>
+          <div class="nav-actions">
+              <a href="login.html" class="signin-link" id="nav-signin-btn">Sign In</a>
+              <button class="hamburger" id="hamburger" aria-label="Toggle menu">
+                  <span></span><span></span><span></span>
+              </button>
+          </div>
+      </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="portal-main-section">
+    <div class="portal-container">
+      <div class="portal-header">
+        <h1 class="portal-title">Employee <em>Portal</em></h1>
+        <p class="portal-subtitle">Welcome back. Select your workspace area to authenticate and log in.</p>
+      </div>
+
+      <div class="portal-grid">
+        <!-- Manager Card -->
+        <a href="login-manager.html" class="portal-card manager">
+          <div class="icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+          </div>
+          <h2 class="card-title">Manager Workspace</h2>
+          <p class="card-desc">Oversee operation, modify organic spice catalog, view all analytics, and manage contact requests & order pipelines.</p>
+          <span class="portal-btn">Access Workspace</span>
+        </a>
+
+        <!-- Delivery Card -->
+        <a href="login-delivery.html" class="portal-card delivery">
+          <div class="icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1" y="3" width="15" height="13"></rect>
+              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+              <circle cx="5.5" cy="18.5" r="2.5"></circle>
+              <circle cx="18.5" cy="18.5" r="2.5"></circle>
+            </svg>
+          </div>
+          <h2 class="card-title">Logistics & Delivery</h2>
+          <p class="card-desc">Manage order processing queue, track shipping progress, and update status of spice shipments.</p>
+          <span class="portal-btn">Access Workspace</span>
+        </a>
+
+        <!-- Support Card -->
+        <a href="login-support.html" class="portal-card support">
+          <div class="icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <h2 class="card-title">Customer Support</h2>
+          <p class="card-desc">Access customer contact form inquiries, view emails, and assist clients with their orders.</p>
+          <span class="portal-btn">Access Workspace</span>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+      <div class="container">
+          <div class="footer-grid">
+              <div class="footer-brand">
+                  <a href="index.html" class="nav-logo">
+                      <span class="logo-icon"> <img src="images/harvest root logo.png" alt="Company Logo" width="70"></span>
+                      <span class="logo-text">Harvest Root</span>
+                  </a>
+                  <p class="footer-desc">Premium spices handpicked from the plantations of Coorg, delivered fresh to your doorstep.</p>
+              </div>
+              <div class="footer-links-group">
+                  <h4>Quick Links</h4>
+                  <ul>
+                      <li><a href="index.html#home">Home</a></li>
+                      <li><a href="index.html#story">Our Story</a></li>
+                      <li><a href="index.html#products">Shop</a></li>
+                      <li><a href="index.html#contact">Contact</a></li>
+                      <li><a href="employee-portal.html">Staff Portal</a></li>
+                  </ul>
+              </div>
+              <div class="footer-links-group">
+                  <h4>Spices</h4>
+                  <ul>
+                      <li><a href="index.html#products">Black Pepper</a></li>
+                      <li><a href="index.html#products">Cloves</a></li>
+                      <li><a href="index.html#products">Cardamom</a></li>
+                      <li><a href="index.html#products">Cinnamon</a></li>
+                  </ul>
+              </div>
+              <div class="footer-links-group">
+                  <h4>Follow Us</h4>
+                  <ul>
+                      <li><a href="#">Instagram</a></li>
+                      <li><a href="#">Facebook</a></li>
+                      <li><a href="#">WhatsApp</a></li>
+                  </ul>
+              </div>
+          </div>
+          <div class="footer-bottom">
+              <p>&copy; 2026 Harvest Root. All rights reserved. Made with care in Coorg.</p>
+          </div>
+      </div>
+  </footer>
+
+  <!-- Mobile Nav Overlay -->
+  <div class="nav-overlay" id="nav-overlay"></div>
+
+  <!-- Script for hamburger navigation -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const hamburger = document.getElementById('hamburger');
+      const navLinks = document.getElementById('nav-links');
+      const navOverlay = document.getElementById('nav-overlay');
+
+      if (hamburger && navLinks && navOverlay) {
+        hamburger.addEventListener('click', () => {
+          hamburger.classList.toggle('active');
+          const isOpen = navLinks.classList.toggle('open');
+          if (isOpen) {
+            navOverlay.classList.add('open');
+            document.body.style.overflow = 'hidden';
+          } else {
+            navOverlay.classList.remove('open');
+            document.body.style.overflow = '';
+          }
+        });
+
+        navOverlay.addEventListener('click', () => {
+          hamburger.classList.remove('active');
+          navLinks.classList.remove('open');
+          navOverlay.classList.remove('open');
+          document.body.style.overflow = '';
+        });
+
+        document.querySelectorAll('.nav-link').forEach(link => {
+          link.addEventListener('click', () => {
+            hamburger.classList.remove('active');
+            navLinks.classList.remove('open');
+            navOverlay.classList.remove('open');
+            document.body.style.overflow = '';
+          });
+        });
+      }
+
+      // Check current customer session status to update standard navbar sign in status
+      async function checkUserSession() {
+        try {
+          const res = await fetch('/api/user/check');
+          const data = await res.json();
+          if (data.authenticated) {
+            const btn = document.getElementById('nav-signin-btn');
+            if (btn) {
+              btn.textContent = 'Account';
+              btn.href = 'index.html'; // Go back to shop view account section
+            }
+          }
+        } catch (err) {}
+      }
+      checkUserSession();
+    });
+  </script>
+</body>
+</html>

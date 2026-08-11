@@ -22,7 +22,6 @@
         </div>
         <span class="logo-text">Harvest Root</span>
       </a>
-
       <div class="brand-mid">
         <p class="brand-tagline">Pure Organic Spices</p>
         <h1 class="brand-heading">Flavour born in the hills of <em>Coorg</em></h1>
@@ -30,7 +29,6 @@
           Sign in to access your dashboard, track current orders, and secure fresh, hand-sorted spices delivered directly to your doorstep.
         </p>
       </div>
-
       <div class="brand-footer">
         <span>&copy; 2026 Harvest Root</span>
         <a href="/">Back to Shop</a>
@@ -41,37 +39,223 @@
     <div class="form-panel">
       <div class="form-wrapper">
 
-        <!-- Error Banner -->
+        <!-- Error / Success Banner -->
         <div class="error-banner" id="auth-error-banner"></div>
+        <div class="success-banner" id="auth-success-banner"></div>
 
-        <!-- SIGN IN / SIGN UP -->
-        <div class="form-view active" id="login-view">
+
+        <!-- ===== VIEW 1: SIGN IN ===== -->
+        <div class="form-view active" id="signin-view">
           <div class="form-header">
-            <h2 class="form-title">Welcome</h2>
-            <p class="form-subtitle">Sign in or create an account to continue</p>
+            <h2 class="form-title">Welcome back</h2>
+            <p class="form-subtitle">Sign in to your Harvest Root account</p>
           </div>
 
           <a href="/api/auth/google" class="google-btn" id="google-btn">
-            <svg class="google-icon" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-              <g transform="matrix(1, 0, 0, 1, 0, 0)">
-                <path d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.4C21.68,11.83 21.56,11.43 21.35,11.1z" fill="#4285F4"/>
-                <path d="M12,20.82c2.43,0 4.47,-0.8 5.96,-2.2l-3.3,-2.58c-0.92,0.6 -2.1,0.97 -3.3,0.97 -2.33,0 -4.3,-1.57 -5,-3.68H2.94v2.66C4.43,18.96 7.97,20.82 12,20.82z" fill="#34A853"/>
-                <path d="M7,13.33c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V7.27H2.94C2.33,8.48 2,9.85 2,11.63c0,1.78 0.33,3.15 0.94,4.36L7,13.33z" fill="#FBBC05"/>
-                <path d="M12,5.78c1.3,0 2.48,0.45 3.4,1.33l2.55,-2.55C16.42,3.12 14.38,2.33 12,2.33c-4.03,0 -7.57,1.86 -9.06,4.94l4.06,3.06C7.7,8.22 9.67,6.65 12,5.78z" fill="#EA4335"/>
+            <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+              <g transform="matrix(1,0,0,1,0,0)">
+                <path d="M21.35,11.1H12v2.7h5.38c-0.24,1.28-0.96,2.37-2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.4C21.68,11.83 21.56,11.43 21.35,11.1z" fill="#4285F4"/>
+                <path d="M12,20.82c2.43,0 4.47,-0.8 5.96,-2.2l-3.3,-2.58c-0.92,0.6-2.1,0.97-3.3,0.97-2.33,0-4.3,-1.57-5,-3.68H2.94v2.66C4.43,18.96 7.97,20.82 12,20.82z" fill="#34A853"/>
+                <path d="M7,13.33c-0.18,-0.54-0.28,-1.11-0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V7.27H2.94C2.33,8.48 2,9.85 2,11.63c0,1.78 0.33,3.15 0.94,4.36L7,13.33z" fill="#FBBC05"/>
+                <path d="M12,5.78c1.3,0 2.48,0.45 3.4,1.33l2.55,-2.55C16.42,3.12 14.38,2.33 12,2.33c-4.03,0-7.57,1.86-9.06,4.94l4.06,3.06C7.7,8.22 9.67,6.65 12,5.78z" fill="#EA4335"/>
               </g>
             </svg>
             Continue with Google
           </a>
 
-          <p style="text-align:center; margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-muted, #8c7e6c);">
-            New users are automatically registered on first sign-in.
+          <div class="divider"><span>or sign in with email</span></div>
+
+          <form id="signin-form" novalidate>
+            <div class="field-group" id="si-email-field">
+              <label for="si-email">Email address</label>
+              <input type="email" id="si-email" name="email" placeholder="you@example.com" autocomplete="email" required>
+            </div>
+            <div class="field-group" id="si-password-field">
+              <label for="si-password">
+                Password
+                <button type="button" class="forgot-link" id="goto-forgot">Forgot password?</button>
+              </label>
+              <div class="password-wrapper">
+                <input type="password" id="si-password" name="password" placeholder="Your password" autocomplete="current-password" required>
+                <button type="button" class="toggle-pw" data-target="si-password" aria-label="Toggle password visibility">
+                  <svg class="eye-icon eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="eye-icon eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                </button>
+              </div>
+            </div>
+            <button type="submit" class="submit-btn" id="signin-btn">
+              <span class="btn-text">Sign In</span>
+              <span class="btn-spinner" style="display:none"></span>
+            </button>
+          </form>
+
+          <p class="switch-view-text">Don't have an account? <button type="button" class="switch-link" id="goto-signup">Create one</button></p>
+        </div>
+
+
+        <!-- ===== VIEW 2: SIGN UP ===== -->
+        <div class="form-view" id="signup-view">
+          <div class="form-header">
+            <h2 class="form-title">Create account</h2>
+            <p class="form-subtitle">Join Harvest Root — it's free</p>
+          </div>
+
+          <a href="/api/auth/google" class="google-btn" id="google-btn-signup">
+            <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+              <g transform="matrix(1,0,0,1,0,0)">
+                <path d="M21.35,11.1H12v2.7h5.38c-0.24,1.28-0.96,2.37-2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.4C21.68,11.83 21.56,11.43 21.35,11.1z" fill="#4285F4"/>
+                <path d="M12,20.82c2.43,0 4.47,-0.8 5.96,-2.2l-3.3,-2.58c-0.92,0.6-2.1,0.97-3.3,0.97-2.33,0-4.3,-1.57-5,-3.68H2.94v2.66C4.43,18.96 7.97,20.82 12,20.82z" fill="#34A853"/>
+                <path d="M7,13.33c-0.18,-0.54-0.28,-1.11-0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V7.27H2.94C2.33,8.48 2,9.85 2,11.63c0,1.78 0.33,3.15 0.94,4.36L7,13.33z" fill="#FBBC05"/>
+                <path d="M12,5.78c1.3,0 2.48,0.45 3.4,1.33l2.55,-2.55C16.42,3.12 14.38,2.33 12,2.33c-4.03,0-7.57,1.86-9.06,4.94l4.06,3.06C7.7,8.22 9.67,6.65 12,5.78z" fill="#EA4335"/>
+              </g>
+            </svg>
+            Continue with Google
+          </a>
+
+          <div class="divider"><span>or sign up with email</span></div>
+
+          <form id="signup-form" novalidate>
+            <div class="field-group" id="su-name-field">
+              <label for="su-name">Full name</label>
+              <input type="text" id="su-name" name="name" placeholder="Your full name" autocomplete="name" required>
+            </div>
+            <div class="field-group" id="su-email-field">
+              <label for="su-email">Email address</label>
+              <input type="email" id="su-email" name="email" placeholder="you@example.com" autocomplete="email" required>
+            </div>
+            <div class="field-group" id="su-password-field">
+              <label for="su-password">Password</label>
+              <div class="password-wrapper">
+                <input type="password" id="su-password" name="password" placeholder="Min. 8 characters" autocomplete="new-password" required>
+                <button type="button" class="toggle-pw" data-target="su-password" aria-label="Toggle password visibility">
+                  <svg class="eye-icon eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="eye-icon eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                </button>
+              </div>
+              <div class="pw-strength">
+                <div class="pw-strength-bar"><div class="pw-strength-fill" id="pw-strength-fill"></div></div>
+                <span class="pw-strength-label" id="pw-strength-label"></span>
+              </div>
+            </div>
+            <div class="field-group" id="su-confirm-field">
+              <label for="su-confirm">Confirm password</label>
+              <div class="password-wrapper">
+                <input type="password" id="su-confirm" name="confirm" placeholder="Re-enter your password" autocomplete="new-password" required>
+                <button type="button" class="toggle-pw" data-target="su-confirm" aria-label="Toggle confirm password visibility">
+                  <svg class="eye-icon eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="eye-icon eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                </button>
+              </div>
+            </div>
+            <button type="submit" class="submit-btn" id="signup-btn">
+              <span class="btn-text">Create Account</span>
+              <span class="btn-spinner" style="display:none"></span>
+            </button>
+          </form>
+
+          <p class="switch-view-text">Already have an account? <button type="button" class="switch-link" id="goto-signin">Sign in</button></p>
+        </div>
+
+
+        <!-- ===== VIEW 3: OTP VERIFICATION ===== -->
+        <div class="form-view" id="otp-view">
+          <div class="form-header">
+            <div class="otp-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2d5a3d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            </div>
+            <h2 class="form-title">Check your email</h2>
+            <p class="form-subtitle">We sent a 6-digit code to <strong id="otp-email-display"></strong></p>
+          </div>
+
+          <form id="otp-form" novalidate>
+            <div class="otp-inputs" id="otp-inputs">
+              <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 1">
+              <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 2">
+              <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 3">
+              <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 4">
+              <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 5">
+              <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 6">
+            </div>
+            <button type="submit" class="submit-btn" id="otp-btn">
+              <span class="btn-text">Verify Email</span>
+              <span class="btn-spinner" style="display:none"></span>
+            </button>
+          </form>
+
+          <div class="resend-row">
+            <span class="resend-text">Didn't receive it?</span>
+            <button type="button" class="switch-link" id="resend-otp-btn">Resend code</button>
+            <span class="resend-timer" id="resend-timer" style="display:none"></span>
+          </div>
+          <p class="switch-view-text" style="margin-top:1.25rem">
+            <button type="button" class="switch-link" id="otp-back-btn">← Back to sign up</button>
           </p>
         </div>
 
-      </div>
-    </div>
 
-  </div>
+        <!-- ===== VIEW 4: FORGOT PASSWORD ===== -->
+        <div class="form-view" id="forgot-view">
+          <div class="form-header">
+            <h2 class="form-title">Reset password</h2>
+            <p class="form-subtitle">Enter your email and we'll send you a reset code</p>
+          </div>
+
+          <!-- Step 4a: Enter email -->
+          <div id="forgot-step-email">
+            <form id="forgot-email-form" novalidate>
+              <div class="field-group" id="fp-email-field">
+                <label for="fp-email">Email address</label>
+                <input type="email" id="fp-email" name="email" placeholder="you@example.com" autocomplete="email" required>
+              </div>
+              <button type="submit" class="submit-btn" id="forgot-email-btn">
+                <span class="btn-text">Send Reset Code</span>
+                <span class="btn-spinner" style="display:none"></span>
+              </button>
+            </form>
+          </div>
+
+          <!-- Step 4b: Enter OTP + new password -->
+          <div id="forgot-step-reset" style="display:none">
+            <p class="form-subtitle" style="margin-bottom:1.25rem">Enter the code sent to <strong id="fp-email-display"></strong> and choose a new password.</p>
+            <form id="forgot-reset-form" novalidate>
+              <div class="otp-inputs" id="fp-otp-inputs" style="margin-bottom:1.25rem">
+                <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 1">
+                <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 2">
+                <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 3">
+                <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 4">
+                <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 5">
+                <input type="text" maxlength="1" class="otp-digit" inputmode="numeric" pattern="[0-9]" aria-label="Digit 6">
+              </div>
+              <div class="field-group" id="fp-newpw-field">
+                <label for="fp-newpw">New password</label>
+                <div class="password-wrapper">
+                  <input type="password" id="fp-newpw" name="newPassword" placeholder="Min. 8 characters" autocomplete="new-password" required>
+                  <button type="button" class="toggle-pw" data-target="fp-newpw" aria-label="Toggle password visibility">
+                    <svg class="eye-icon eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg class="eye-icon eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  </button>
+                </div>
+              </div>
+              <button type="submit" class="submit-btn" id="forgot-reset-btn">
+                <span class="btn-text">Reset Password</span>
+                <span class="btn-spinner" style="display:none"></span>
+              </button>
+            </form>
+            <div class="resend-row" style="margin-top:1rem">
+              <span class="resend-text">Didn't receive it?</span>
+              <button type="button" class="switch-link" id="fp-resend-btn">Resend code</button>
+              <span class="resend-timer" id="fp-resend-timer" style="display:none"></span>
+            </div>
+          </div>
+
+          <p class="switch-view-text" style="margin-top:1.5rem">
+            <button type="button" class="switch-link" id="forgot-back-btn">← Back to sign in</button>
+          </p>
+        </div>
+
+      </div><!-- /.form-wrapper -->
+    </div><!-- /.form-panel -->
+  </div><!-- /.auth-container -->
 
   <script src="login.js"></script>
 </body>

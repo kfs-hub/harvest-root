@@ -92,6 +92,29 @@ async function initDb() {
             )
         `);
 
+        // Create employees table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS employees (
+                id SERIAL PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+
+        // Create employee password requests table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS employee_password_requests (
+                id SERIAL PRIMARY KEY,
+                username TEXT NOT NULL,
+                request_type TEXT NOT NULL, -- 'forgot' or 'change'
+                new_password_hash TEXT,
+                status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+
 
         // Create OTP verifications table
         await client.query(`
@@ -149,6 +172,27 @@ async function initDb() {
                 ['admin', hash]
             );
             console.log('Default admin account created. (admin / harvestroot2026)');
+        }
+
+        // Seed employees if empty
+        const employeeCount = await client.query('SELECT COUNT(*) as count FROM employees');
+        if (parseInt(employeeCount.rows[0].count) === 0) {
+            const managerHash = bcrypt.hashSync('harvestmanager2026', 10);
+            const deliveryHash = bcrypt.hashSync('harvestdelivery2026', 10);
+            const supportHash = bcrypt.hashSync('harvestsupport2026', 10);
+
+            await client.query(
+                `INSERT INTO employees (username, password_hash, role) VALUES 
+                ($1, $2, $3),
+                ($4, $5, $6),
+                ($7, $8, $9)`,
+                [
+                    'manager', managerHash, 'manager',
+                    'delivery', deliveryHash, 'delivery',
+                    'support', supportHash, 'support'
+                ]
+            );
+            console.log('Default employee accounts created.');
         }
 
         console.log('Database tables initialized.');

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delivery Sign In — Harvest Root</title>
+  <meta name="description" content="Secure access to the Harvest Root Logistics & Delivery workspace.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,500;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="login.css">
+</head>
+<body>
+
+  <div class="auth-container">
+
+    <!-- Left panel (Branding) -->
+    <div class="brand-panel">
+      <a href="/" class="brand-logo" id="home-link">
+        <div class="logo-icon">
+          <img src="images/harvest root logo.png" alt="Harvest Root Logo" width="48">
+        </div>
+        <span class="logo-text">Harvest Root</span>
+      </a>
+
+      <div class="brand-mid">
+        <p class="brand-tagline">Logistics & Delivery</p>
+        <h1 class="brand-heading">Fresh spices to their <em>doorstep</em></h1>
+        <p class="brand-description">
+          Sign in using your assigned credentials to manage the delivery queue, view shipping addresses, update delivery status, and coordinate spice shipments.
+        </p>
+      </div>
+
+      <div class="brand-footer">
+        <span>&copy; 2026 Harvest Root</span>
+        <a href="employee-portal.html">&larr; Employee Portal</a>
+      </div>
+    </div>
+
+    <!-- Right panel (Form) -->
+    <div class="form-panel">
+      <div class="form-wrapper">
+
+        <!-- Error Banner -->
+        <div class="error-banner" id="error-banner"></div>
+
+        <div class="form-view active">
+          <div class="form-header">
+            <h2 class="form-title">Delivery Login</h2>
+            <p class="form-subtitle">Enter your username and password below</p>
+          </div>
+
+          <form id="login-form">
+            <div class="form-group">
+              <label class="form-label" for="username">Username</label>
+              <input class="form-input" type="text" id="username" autocomplete="username" placeholder="delivery_username" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="password">Password</label>
+              <input class="form-input" type="password" id="password" autocomplete="current-password" placeholder="••••••••" required>
+              <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                <button type="button" id="btn-forgot" style="background:none; border:none; color:var(--green); font-size:0.82rem; font-weight:600; cursor:pointer; font-family:var(--font-sans); outline:none;">Forgot Password?</button>
+              </div>
+            </div>
+            <button type="submit" class="submit-btn" id="submit-btn">Sign In</button>
+          </form>
+
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const loginForm = document.getElementById('login-form');
+      const errorBanner = document.getElementById('error-banner');
+      const submitBtn = document.getElementById('submit-btn');
+      let lockoutTimer = null;
+
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (lockoutTimer) return;
+        errorBanner.classList.remove('visible');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing in...';
+
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+
+        try {
+          const res = await fetch('/api/employee/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+          });
+          const data = await res.json();
+
+          if (res.status === 429) {
+            const retryAfter = data.retryAfter || parseInt(res.headers.get('Retry-After')) || 60;
+            startLockout(retryAfter, data.error);
+            return;
+          }
+
+          if (res.ok && data.success) {
+            if (data.role === 'delivery') {
+              window.location.href = 'delivery.html';
+            } else {
+              await fetch('/api/employee/logout', { method: 'POST' });
+              showError('Access denied. This workspace is restricted to Delivery staff.');
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Sign In';
+            }
+          } else {
+            showError(data.error || 'Invalid credentials.');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Sign In';
+          }
+        } catch (err) {
+          showError('Connection error. Is the server running?');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign In';
+        }
+      });
+
+      function showError(msg) {
+        errorBanner.textContent = msg;
+        errorBanner.classList.add('visible');
+      }
+
+      function startLockout(seconds, message) {
+        document.getElementById('username').disabled = true;
+        document.getElementById('password').disabled = true;
+        submitBtn.disabled = true;
+        let remaining = seconds;
+        updateLockoutUI(remaining, message);
+        lockoutTimer = setInterval(() => {
+          remaining--;
+          if (remaining <= 0) {
+            clearInterval(lockoutTimer);
+            lockoutTimer = null;
+            document.getElementById('username').disabled = false;
+            document.getElementById('password').disabled = false;
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Sign In';
+            errorBanner.classList.remove('visible');
+          } else {
+            updateLockoutUI(remaining, message);
+          }
+        }, 1000);
+      }
+
+      function updateLockoutUI(seconds, message) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        const timeStr = mins > 0 ? `${mins}m ${secs.toString().padStart(2, '0')}s` : `${secs}s`;
+        errorBanner.innerHTML = `⏳ ${message || 'Too many login attempts.'}<br><strong>Try again in ${timeStr}</strong>`;
+        errorBanner.classList.add('visible');
+        submitBtn.textContent = `Locked (${timeStr})`;
+      }
+      const btnForgot = document.getElementById('btn-forgot');
+      if (btnForgot) {
+        btnForgot.addEventListener('click', async () => {
+          const usernameVal = prompt("Enter your employee username to request a password reset from the Manager:");
+          if (!usernameVal || !usernameVal.trim()) return;
+          try {
+            const res = await fetch('/api/employee/request-reset', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username: usernameVal.trim() })
+            });
+            const data = await res.json();
+            alert(res.ok ? (data.message || 'Request submitted.') : (data.error || 'Failed to submit.'));
+          } catch (err) {
+            alert('Connection error. Failed to submit reset request.');
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
