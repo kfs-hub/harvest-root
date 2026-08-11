@@ -514,14 +514,26 @@ app.post('/api/user/signup', async (req, res) => {
             [cleanName, cleanEmail, passwordHash]
         );
 
-        // Generate and send OTP for email verification
+        // Generate OTP and save to DB
         const signupOtp = Math.floor(100000 + Math.random() * 900000).toString();
         const signupOtpExpiry = new Date(Date.now() + 10 * 60 * 1000);
         await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE email = $1 AND used = FALSE`, [cleanEmail]);
         await pool.query(`INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)`, [cleanEmail, signupOtp, signupOtpExpiry]);
-        await sendOTPEmail(cleanEmail, cleanName, signupOtp);
 
-        res.status(201).json({ success: true, message: 'Account created! Please check your email for a verification code.' });
+        // Send OTP email — non-fatal: if email fails, user can still proceed and use resend
+        let emailWarning = null;
+        try {
+            await sendOTPEmail(cleanEmail, cleanName, signupOtp);
+        } catch (emailErr) {
+            console.error('OTP email send failed (non-fatal):', emailErr.message);
+            emailWarning = 'Account created but email delivery failed. Use "Resend code" on the next screen.';
+        }
+
+        res.status(201).json({
+            success: true,
+            message: emailWarning || 'Account created! Please check your email for a verification code.',
+            emailWarning: !!emailWarning
+        });
     } catch (err) {
         console.error('Signup error:', err.message);
         return res.status(500).json({ error: 'Failed to create account. Please try again.' });
@@ -670,7 +682,11 @@ app.post('/api/user/forgot-password', async (req, res) => {
             [cleanEmail, otp, expiresAt]
         );
 
-        await sendOTPEmail(cleanEmail, user.name, otp);
+        try {
+            await sendOTPEmail(cleanEmail, user.name, otp);
+        } catch (emailErr) {
+            console.error('Forgot password email send failed (non-fatal):', emailErr.message);
+        }
 
         res.json({ success: true, message: 'If an account exists, a reset code has been sent to your email.' });
     } catch (err) {
@@ -782,7 +798,11 @@ app.post("/api/otp/send", async (req, res) => {
         );
 
         // Send email
-        await sendOTPEmail(email, name || "there", otp);
+        try {
+            await sendOTPEmail(email, name || "there", otp);
+        } catch (emailErr) {
+            console.error('OTP resend email failed (non-fatal):', emailErr.message);
+        }
         res.json({ success: true, message: "OTP sent to your email." });
     } catch (err) {
         console.error("OTP send error:", err.message);
