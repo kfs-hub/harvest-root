@@ -70,7 +70,7 @@ const emailService = process.env.EMAIL_SERVICE ? process.env.EMAIL_SERVICE.trim(
 
 let transporter;
 if (emailUser && emailPass) {
-    // Production SMTP
+    // Production SMTP (Render / Vercel — requires EMAIL_USER + EMAIL_PASS env vars)
     transporter = nodemailer.createTransport({
         service: emailService,
         auth: {
@@ -83,25 +83,27 @@ if (emailUser && emailPass) {
         .then(() => console.log('✉️ SMTP transporter verified.'))
         .catch(err => console.error('✉️ SMTP transporter verification failed:', err.message));
 } else {
-    // Development fallback using Ethereal Fake SMTP
-    nodemailer.createTestAccount().then(account => {
-        transporter = nodemailer.createTransport({
-            host: account.smtp.host,
-            port: account.smtp.port,
-            secure: account.smtp.secure,
-            auth: {
-                user: account.user,
-                pass: account.pass
-            }
-        });
-        console.log('✉️ Dev Ethereal SMTP initialized. Emails will log in console.');
-    }).catch(err => {
-        console.error('Failed to initialize Dev SMTP:', err.message);
-    });
+    // Development fallback — lazy-init Ethereal only when first email is sent
+    // (avoids blocking outbound HTTP call on Vercel cold starts)
+    console.log('✉️ No EMAIL_USER/EMAIL_PASS set. Ethereal SMTP will init on first send.');
 }
 
 async function sendOTPEmail(toEmail, toName, otpCode) {
-    const mailOptions = {
+    // Lazy-init Ethereal dev transporter if no real credentials are set
+    if (!transporter) {
+        try {
+            const account = await nodemailer.createTestAccount();
+            transporter = nodemailer.createTransport({
+                host: account.smtp.host,
+                port: account.smtp.port,
+                secure: account.smtp.secure,
+                auth: { user: account.user, pass: account.pass }
+            });
+            console.log('✉️ Dev Ethereal SMTP initialized.');
+        } catch (err) {
+            throw new Error('Email transporter could not be initialized: ' + err.message);
+        }
+    }
         from: `"Harvest Root" <${emailUser || 'no-reply@harvestroot.com'}>`,
         to: toEmail,
         subject: `${otpCode} is your Harvest Root verification code`,

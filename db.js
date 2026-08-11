@@ -204,10 +204,14 @@ async function initDb() {
     }
 }
 
-// Initialize on startup
-initDb().catch(err => {
-    console.error('Fatal: Could not initialize database.', err.message);
-    process.exit(1);
-});
+// Initialize on startup — skip on Vercel (tables already exist, cold starts are short-lived)
+if (!process.env.VERCEL) {
+    initDb().catch(err => {
+        console.error('Fatal: Could not initialize database.', err.message);
+        process.exit(1);
+    });
+} else {
+    console.log('⚡ Vercel environment detected — skipping DB init.');
+}
 
 module.exports = pool;
