@@ -61,77 +61,77 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
-// ===== EMAIL / OTP VERIFICATION CONFIG =====
-const nodemailer = require('nodemailer');
+// ===== SUPABASE AUTH (OTP email delivery + verification) =====
+const { createClient } = require('@supabase/supabase-js');
 
-const emailUser = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim() : '';
-const emailPass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.trim() : '';
-const emailService = process.env.EMAIL_SERVICE ? process.env.EMAIL_SERVICE.trim() : 'gmail';
+const supabaseUrl  = process.env.SUPABASE_URL  || '';
+const supabaseAnon = process.env.SUPABASE_ANON_KEY || '';
 
-let transporter;
-if (emailUser && emailPass) {
-    // Production SMTP (Render / Vercel — requires EMAIL_USER + EMAIL_PASS env vars)
-    transporter = nodemailer.createTransport({
-        service: emailService,
-        auth: {
-            user: emailUser,
-            pass: emailPass
+if (!supabaseUrl || !supabaseAnon) {
+    console.warn('⚠️  SUPABASE_URL or SUPABASE_ANON_KEY not set. OTP emails will be logged to console only.');
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnon, {
+    auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false
+    }
+});
+
+// Send OTP via Supabase Auth (triggers Supabase's built-in email)
+async function sendOTPEmail(toEmail, toName, otpCode) {
+    if (!supabaseUrl || !supabaseAnon) {
+        // Dev fallback — log OTP to console
+        console.log(`\n✉️  [DEV MODE — OTP not emailed]\n   To: ${toEmail}\n   Code: ${otpCode}\n`);
+        return;
+    }
+
+    const { error } = await supabase.auth.signInWithOtp({
+        email: toEmail,
+        options: {
+            shouldCreateUser: false,   // we manage users ourselves in our own DB
+            data: { name: toName }
         }
     });
 
-    transporter.verify()
-        .then(() => console.log('✉️ SMTP transporter verified.'))
-        .catch(err => console.error('✉️ SMTP transporter verification failed:', err.message));
-} else {
-    // Development fallback — lazy-init Ethereal only when first email is sent
-    // (avoids blocking outbound HTTP call on Vercel cold starts)
-    console.log('✉️ No EMAIL_USER/EMAIL_PASS set. Ethereal SMTP will init on first send.');
-}
-
-async function sendOTPEmail(toEmail, toName, otpCode) {
-    // Lazy-init Ethereal dev transporter if no real credentials are set
-    if (!transporter) {
-        try {
-            const account = await nodemailer.createTestAccount();
-            transporter = nodemailer.createTransport({
-                host: account.smtp.host,
-                port: account.smtp.port,
-                secure: account.smtp.secure,
-                auth: { user: account.user, pass: account.pass }
+    if (error) {
+        // If user doesn't exist in Supabase Auth yet, create them first then resend
+        if (error.message && error.message.toLowerCase().includes('not found')) {
+            // Supabase requires the email to exist in auth.users to send OTP
+            // Sign up silently so Supabase knows the email, then send OTP
+            await supabase.auth.signUp({
+                email: toEmail,
+                password: Math.random().toString(36).slice(-16) + 'Aa1!', // random throwaway password
+                options: { data: { name: toName } }
             });
-            console.log('✉️ Dev Ethereal SMTP initialized.');
-        } catch (err) {
-            throw new Error('Email transporter could not be initialized: ' + err.message);
+            // Retry OTP send
+            const { error: retryError } = await supabase.auth.signInWithOtp({
+                email: toEmail,
+                options: { shouldCreateUser: true, data: { name: toName } }
+            });
+            if (retryError) {
+                console.error('✉️  Supabase OTP retry error:', retryError.message);
+                throw new Error(retryError.message);
+            }
+        } else {
+            console.error('✉️  Supabase OTP error:', error.message);
+            throw new Error(error.message);
         }
     }
 
-    const mailOptions = {
-        from: `"Harvest Root" <${emailUser || 'no-reply@harvestroot.com'}>`,
-        to: toEmail,
-        subject: `${otpCode} is your Harvest Root verification code`,
-        html: `
-            <div style="font-family: 'Inter', sans-serif; max-width: 500px; margin: 0 auto; padding: 2rem; border: 1px solid #f0eae1; border-radius: 12px; background-color: #fdfcf7;">
-                <div style="text-align: center; margin-bottom: 1.5rem;">
-                    <h2 style="font-family: 'Playfair Display', serif; color: #2d5a3d; margin: 0; font-size: 1.8rem;">Harvest Root</h2>
-                    <p style="color: #8c7e6c; font-size: 0.85rem; margin-top: 0.25rem;">Pure Organic Spices from Coorg</p>
-                </div>
-                <h3 style="font-family: 'Playfair Display', serif; color: #2c2420; text-align: center; font-size: 1.3rem;">Verify your email address</h3>
-                <p style="color: #554a42; font-size: 0.95rem; line-height: 1.5;">Hi ${toName},</p>
-                <p style="color: #554a42; font-size: 0.95rem; line-height: 1.5;">Thank you for creating an account with Harvest Root. Please use the following 6-digit verification code to complete your signup. This code is valid for 10 minutes.</p>
-                <div style="text-align: center; margin: 2rem 0;">
-                    <span style="font-size: 2.2rem; font-weight: 700; letter-spacing: 6px; color: #2d5a3d; background: #f0eae1; padding: 0.75rem 2rem; border-radius: 8px; border: 1px dashed #d1c7bd; display: inline-block;">${otpCode}</span>
-                </div>
-                <p style="color: #8c7e6c; font-size: 0.8rem; line-height: 1.4; text-align: center;">If you didn't request this code, you can safely ignore this email.</p>
-                <hr style="border: none; border-top: 1px solid #f0eae1; margin: 2rem 0;">
-                <p style="color: #8c7e6c; font-size: 0.8rem; text-align: center; margin: 0;">© 2026 Harvest Root. Coorg Plantation, Karnataka, India.</p>
-            </div>
-        `
-    };
-    const info = await transporter.sendMail(mailOptions);
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    if (previewUrl) {
-        console.log(`\n✉️ [Test Email Preview Link]: ${previewUrl}\n`);
-    }
+    console.log(`✉️  Supabase OTP sent to ${toEmail}`);
+}
+
+// Verify OTP via Supabase Auth
+async function verifySupabaseOTP(email, token) {
+    const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'email'
+    });
+    if (error) throw new Error(error.message);
+    return data;
 }
 
 const app = express();
@@ -514,16 +514,10 @@ app.post('/api/user/signup', async (req, res) => {
             [cleanName, cleanEmail, passwordHash]
         );
 
-        // Generate OTP and save to DB
-        const signupOtp = Math.floor(100000 + Math.random() * 900000).toString();
-        const signupOtpExpiry = new Date(Date.now() + 10 * 60 * 1000);
-        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE email = $1 AND used = FALSE`, [cleanEmail]);
-        await pool.query(`INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)`, [cleanEmail, signupOtp, signupOtpExpiry]);
-
-        // Send OTP email — non-fatal: if email fails, user can still proceed and use resend
+        // Send OTP via Supabase Auth — triggers Supabase to email the code
         let emailWarning = null;
         try {
-            await sendOTPEmail(cleanEmail, cleanName, signupOtp);
+            await sendOTPEmail(cleanEmail, cleanName, null);
         } catch (emailErr) {
             console.error('OTP email send failed (non-fatal):', emailErr.message);
             emailWarning = 'Account created but email delivery failed. Use "Resend code" on the next screen.';
@@ -610,22 +604,10 @@ app.post('/api/user/verify-and-login', async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-        // Validate OTP
-        const { rows: otpRows } = await pool.query(
-            `SELECT * FROM otp_verifications
-             WHERE email = $1 AND otp_code = $2 AND used = FALSE AND expires_at > NOW()
-             ORDER BY created_at DESC LIMIT 1`,
-            [cleanEmail, otp]
-        );
+        // Verify OTP via Supabase Auth
+        await verifySupabaseOTP(cleanEmail, otp);
 
-        if (otpRows.length === 0) {
-            return res.status(400).json({ error: 'Invalid or expired code. Please request a new one.' });
-        }
-
-        // Mark OTP as used
-        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE id = $1`, [otpRows[0].id]);
-
-        // Fetch user
+        // Fetch user from our own DB
         const { rows: userRows } = await pool.query('SELECT * FROM users WHERE email = $1', [cleanEmail]);
         const user = userRows[0];
 
@@ -633,7 +615,7 @@ app.post('/api/user/verify-and-login', async (req, res) => {
             return res.status(404).json({ error: 'Account not found. Please sign up again.' });
         }
 
-        // Establish session
+        // Establish Express session
         req.session.userId = user.id;
         req.session.userName = user.name;
         req.session.userEmail = user.email;
@@ -650,11 +632,21 @@ app.post('/api/user/verify-and-login', async (req, res) => {
         });
     } catch (err) {
         console.error('Verify-and-login error:', err.message);
-        return res.status(500).json({ error: 'Verification failed. Please try again.' });
+        // Give a user-friendly message for invalid/expired OTP
+        const isOtpError = err.message && (
+            err.message.toLowerCase().includes('invalid') ||
+            err.message.toLowerCase().includes('expired') ||
+            err.message.toLowerCase().includes('token')
+        );
+        return res.status(400).json({
+            error: isOtpError
+                ? 'Invalid or expired code. Please request a new one.'
+                : 'Verification failed. Please try again.'
+        });
     }
 });
 
-// User Forgot Password — send OTP to email
+// User Forgot Password — send OTP via Supabase Auth
 app.post('/api/user/forgot-password', async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required.' });
@@ -670,22 +662,11 @@ app.post('/api/user/forgot-password', async (req, res) => {
             return res.json({ success: true, message: 'If an account exists, a reset code has been sent to your email.' });
         }
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-        // Invalidate any existing OTPs for this email
-        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE email = $1 AND used = FALSE`, [cleanEmail]);
-
-        // Store new OTP
-        await pool.query(
-            `INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)`,
-            [cleanEmail, otp, expiresAt]
-        );
-
+        // Send OTP via Supabase — non-fatal
         try {
-            await sendOTPEmail(cleanEmail, user.name, otp);
+            await sendOTPEmail(cleanEmail, user.name, null);
         } catch (emailErr) {
-            console.error('Forgot password email send failed (non-fatal):', emailErr.message);
+            console.error('Forgot password OTP send failed (non-fatal):', emailErr.message);
         }
 
         res.json({ success: true, message: 'If an account exists, a reset code has been sent to your email.' });
@@ -695,7 +676,7 @@ app.post('/api/user/forgot-password', async (req, res) => {
     }
 });
 
-// User Reset Password — verify OTP + set new password
+// User Reset Password — verify Supabase OTP + set new password
 app.post('/api/user/reset-password', async (req, res) => {
     const { email, otp, newPassword } = req.body;
     if (!email || !otp || !newPassword) {
@@ -709,22 +690,10 @@ app.post('/api/user/reset-password', async (req, res) => {
     }
 
     try {
-        // Validate OTP
-        const { rows: otpRows } = await pool.query(
-            `SELECT * FROM otp_verifications
-             WHERE email = $1 AND otp_code = $2 AND used = FALSE AND expires_at > NOW()
-             ORDER BY created_at DESC LIMIT 1`,
-            [cleanEmail, otp]
-        );
+        // Verify OTP via Supabase Auth
+        await verifySupabaseOTP(cleanEmail, otp);
 
-        if (otpRows.length === 0) {
-            return res.status(400).json({ error: 'Invalid or expired code. Please request a new one.' });
-        }
-
-        // Mark OTP as used
-        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE id = $1`, [otpRows[0].id]);
-
-        // Update password
+        // Update password in our own DB
         const newHash = bcrypt.hashSync(newPassword, 10);
         const result = await pool.query(
             `UPDATE users SET password_hash = $1 WHERE email = $2`,
@@ -738,7 +707,16 @@ app.post('/api/user/reset-password', async (req, res) => {
         res.json({ success: true, message: 'Password reset successfully. You can now sign in.' });
     } catch (err) {
         console.error('Reset password error:', err.message);
-        return res.status(500).json({ error: 'Failed to reset password. Please try again.' });
+        const isOtpError = err.message && (
+            err.message.toLowerCase().includes('invalid') ||
+            err.message.toLowerCase().includes('expired') ||
+            err.message.toLowerCase().includes('token')
+        );
+        return res.status(400).json({
+            error: isOtpError
+                ? 'Invalid or expired code. Please request a new one.'
+                : 'Failed to reset password. Please try again.'
+        });
     }
 });
 
@@ -781,25 +759,10 @@ app.post("/api/otp/send", async (req, res) => {
     const { email, name } = req.body;
     if (!email) return res.status(400).json({ error: "Email is required." });
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
     try {
-        // Invalidate any existing unused OTPs for this email
-        await pool.query(
-            `UPDATE otp_verifications SET used = TRUE WHERE email = $1 AND used = FALSE`,
-            [email.toLowerCase()]
-        );
-
-        // Store new OTP
-        await pool.query(
-            `INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)`,
-            [email.toLowerCase(), otp, expiresAt]
-        );
-
-        // Send email
+        // Send OTP via Supabase Auth (Supabase manages code generation + expiry)
         try {
-            await sendOTPEmail(email, name || "there", otp);
+            await sendOTPEmail(email.toLowerCase(), name || 'there', null);
         } catch (emailErr) {
             console.error('OTP resend email failed (non-fatal):', emailErr.message);
         }

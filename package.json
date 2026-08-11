@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "@vercel/blob": "^2.4.0",
     "bcryptjs": "^3.0.3",
     "connect-pg-simple": "^10.0.0",
@@ -22,6 +23,7 @@
     "nodemailer": "^8.0.8",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
-    "pg": "^8.21.0"
+    "pg": "^8.21.0",
+    "resend": "^6.19.0"
   }
 }
