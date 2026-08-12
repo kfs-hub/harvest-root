@@ -61,77 +61,66 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
-// ===== SUPABASE AUTH (OTP email delivery + verification) =====
-const { createClient } = require('@supabase/supabase-js');
+// ===== EMAIL / OTP CONFIG =====
+const nodemailer = require('nodemailer');
 
-const supabaseUrl  = process.env.SUPABASE_URL  || '';
-const supabaseAnon = process.env.SUPABASE_ANON_KEY || '';
+const resendApiKey = process.env.RESEND_API_KEY || '';
 
-if (!supabaseUrl || !supabaseAnon) {
-    console.warn('⚠️  SUPABASE_URL or SUPABASE_ANON_KEY not set. OTP emails will be logged to console only.');
-}
+// Use Resend SMTP if key is set, otherwise fall back to Gmail
+const transporter = resendApiKey
+    ? nodemailer.createTransport({
+        host: 'smtp.resend.com',
+        port: 465,
+        secure: true,
+        auth: { user: 'resend', pass: resendApiKey }
+    })
+    : nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: process.env.EMAIL_USER || '',
+            pass: process.env.EMAIL_PASS || ''
+        }
+    });
 
-const supabase = createClient(supabaseUrl, supabaseAnon, {
-    auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-        detectSessionInUrl: false
-    }
-});
+transporter.verify()
+    .then(() => console.log('✉️  Email transporter ready.'))
+    .catch(err => console.warn('⚠️  Email transporter issue:', err.message));
 
-// Send OTP via Supabase Auth (triggers Supabase's built-in email)
 async function sendOTPEmail(toEmail, toName, otpCode) {
-    if (!supabaseUrl || !supabaseAnon) {
-        // Dev fallback — log OTP to console
-        console.log(`\n✉️  [DEV MODE — OTP not emailed]\n   To: ${toEmail}\n   Code: ${otpCode}\n`);
+    if (!otpCode) {
+        console.warn('sendOTPEmail called with no OTP code — skipping.');
         return;
     }
 
-    const { error } = await supabase.auth.signInWithOtp({
-        email: toEmail,
-        options: {
-            shouldCreateUser: false,   // we manage users ourselves in our own DB
-            data: { name: toName }
-        }
+    const fromAddress = resendApiKey
+        ? 'Harvest Root <onboarding@resend.dev>'
+        : `Harvest Root <${process.env.EMAIL_USER}>`;
+
+    const html = `
+        <div style="font-family:'Inter',sans-serif;max-width:520px;margin:0 auto;padding:2rem;border:1px solid #f0eae1;border-radius:12px;background:#fdfcf7;">
+            <div style="text-align:center;margin-bottom:1.5rem;">
+                <h2 style="font-family:Georgia,serif;color:#2d5a3d;margin:0;font-size:1.8rem;">Harvest Root</h2>
+                <p style="color:#8c7e6c;font-size:0.85rem;margin-top:4px;">Pure Organic Spices from Coorg</p>
+            </div>
+            <h3 style="color:#2c2420;text-align:center;font-size:1.2rem;margin-bottom:0.5rem;">Your verification code</h3>
+            <p style="color:#554a42;font-size:0.95rem;line-height:1.6;">Hi ${toName},</p>
+            <p style="color:#554a42;font-size:0.95rem;line-height:1.6;">Use the code below to verify your email. It expires in <strong>10 minutes</strong>.</p>
+            <div style="text-align:center;margin:2rem 0;">
+                <span style="font-size:2.4rem;font-weight:700;letter-spacing:10px;color:#2d5a3d;background:#f0eae1;padding:0.75rem 2rem;border-radius:8px;border:1px dashed #c8b99a;display:inline-block;">${otpCode}</span>
+            </div>
+            <p style="color:#8c7e6c;font-size:0.8rem;text-align:center;">If you didn't request this, ignore this email.</p>
+            <hr style="border:none;border-top:1px solid #f0eae1;margin:1.5rem 0;">
+            <p style="color:#8c7e6c;font-size:0.75rem;text-align:center;margin:0;">© 2026 Harvest Root · Coorg, Karnataka, India</p>
+        </div>`;
+
+    await transporter.sendMail({
+        from: fromAddress,
+        to: toEmail,
+        subject: `${otpCode} — your Harvest Root verification code`,
+        html
     });
 
-    if (error) {
-        // If user doesn't exist in Supabase Auth yet, create them first then resend
-        if (error.message && error.message.toLowerCase().includes('not found')) {
-            // Supabase requires the email to exist in auth.users to send OTP
-            // Sign up silently so Supabase knows the email, then send OTP
-            await supabase.auth.signUp({
-                email: toEmail,
-                password: Math.random().toString(36).slice(-16) + 'Aa1!', // random throwaway password
-                options: { data: { name: toName } }
-            });
-            // Retry OTP send
-            const { error: retryError } = await supabase.auth.signInWithOtp({
-                email: toEmail,
-                options: { shouldCreateUser: true, data: { name: toName } }
-            });
-            if (retryError) {
-                console.error('✉️  Supabase OTP retry error:', retryError.message);
-                throw new Error(retryError.message);
-            }
-        } else {
-            console.error('✉️  Supabase OTP error:', error.message);
-            throw new Error(error.message);
-        }
-    }
-
-    console.log(`✉️  Supabase OTP sent to ${toEmail}`);
-}
-
-// Verify OTP via Supabase Auth
-async function verifySupabaseOTP(email, token) {
-    const { data, error } = await supabase.auth.verifyOtp({
-        email,
-        token,
-        type: 'email'
-    });
-    if (error) throw new Error(error.message);
-    return data;
+    console.log(`✉️  OTP email sent to ${toEmail}`);
 }
 
 const app = express();
@@ -514,10 +503,18 @@ app.post('/api/user/signup', async (req, res) => {
             [cleanName, cleanEmail, passwordHash]
         );
 
-        // Send OTP via Supabase Auth — triggers Supabase to email the code
+        // Generate OTP, save to DB, and email it
+        const signupOtp      = Math.floor(100000 + Math.random() * 900000).toString();
+        const signupOtpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE email = $1 AND used = FALSE`, [cleanEmail]);
+        await pool.query(
+            `INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)`,
+            [cleanEmail, signupOtp, signupOtpExpiry]
+        );
+
         let emailWarning = null;
         try {
-            await sendOTPEmail(cleanEmail, cleanName, null);
+            await sendOTPEmail(cleanEmail, cleanName, signupOtp);
         } catch (emailErr) {
             console.error('OTP email send failed (non-fatal):', emailErr.message);
             emailWarning = 'Account created but email delivery failed. Use "Resend code" on the next screen.';
@@ -604,10 +601,22 @@ app.post('/api/user/verify-and-login', async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-        // Verify OTP via Supabase Auth
-        await verifySupabaseOTP(cleanEmail, otp);
+        // Validate OTP against our own DB
+        const { rows: otpRows } = await pool.query(
+            `SELECT * FROM otp_verifications
+             WHERE email = $1 AND otp_code = $2 AND used = FALSE AND expires_at > NOW()
+             ORDER BY created_at DESC LIMIT 1`,
+            [cleanEmail, otp]
+        );
 
-        // Fetch user from our own DB
+        if (otpRows.length === 0) {
+            return res.status(400).json({ error: 'Invalid or expired code. Please request a new one.' });
+        }
+
+        // Mark OTP as used
+        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE id = $1`, [otpRows[0].id]);
+
+        // Fetch user from our DB
         const { rows: userRows } = await pool.query('SELECT * FROM users WHERE email = $1', [cleanEmail]);
         const user = userRows[0];
 
@@ -616,37 +625,27 @@ app.post('/api/user/verify-and-login', async (req, res) => {
         }
 
         // Establish Express session
-        req.session.userId = user.id;
-        req.session.userName = user.name;
+        req.session.userId    = user.id;
+        req.session.userName  = user.name;
         req.session.userEmail = user.email;
 
         res.json({
             success: true,
             user: {
-                name: user.name,
-                email: user.email,
-                address: user.address || '',
-                avatar: user.avatar || '',
+                name:          user.name,
+                email:         user.email,
+                address:       user.address       || '',
+                avatar:        user.avatar        || '',
                 auth_provider: user.auth_provider || 'local'
             }
         });
     } catch (err) {
         console.error('Verify-and-login error:', err.message);
-        // Give a user-friendly message for invalid/expired OTP
-        const isOtpError = err.message && (
-            err.message.toLowerCase().includes('invalid') ||
-            err.message.toLowerCase().includes('expired') ||
-            err.message.toLowerCase().includes('token')
-        );
-        return res.status(400).json({
-            error: isOtpError
-                ? 'Invalid or expired code. Please request a new one.'
-                : 'Verification failed. Please try again.'
-        });
+        return res.status(500).json({ error: 'Verification failed. Please try again.' });
     }
 });
 
-// User Forgot Password — send OTP via Supabase Auth
+// User Forgot Password — generate OTP and email it
 app.post('/api/user/forgot-password', async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required.' });
@@ -654,7 +653,10 @@ app.post('/api/user/forgot-password', async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-        const { rows } = await pool.query('SELECT id, name, auth_provider, password_hash FROM users WHERE email = $1', [cleanEmail]);
+        const { rows } = await pool.query(
+            'SELECT id, name, auth_provider, password_hash FROM users WHERE email = $1',
+            [cleanEmail]
+        );
         const user = rows[0];
 
         // Always respond with success to prevent email enumeration
@@ -662,11 +664,19 @@ app.post('/api/user/forgot-password', async (req, res) => {
             return res.json({ success: true, message: 'If an account exists, a reset code has been sent to your email.' });
         }
 
-        // Send OTP via Supabase — non-fatal
+        const otp       = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE email = $1 AND used = FALSE`, [cleanEmail]);
+        await pool.query(
+            `INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)`,
+            [cleanEmail, otp, expiresAt]
+        );
+
         try {
-            await sendOTPEmail(cleanEmail, user.name, null);
+            await sendOTPEmail(cleanEmail, user.name, otp);
         } catch (emailErr) {
-            console.error('Forgot password OTP send failed (non-fatal):', emailErr.message);
+            console.error('Forgot password email failed (non-fatal):', emailErr.message);
         }
 
         res.json({ success: true, message: 'If an account exists, a reset code has been sent to your email.' });
@@ -676,7 +686,7 @@ app.post('/api/user/forgot-password', async (req, res) => {
     }
 });
 
-// User Reset Password — verify Supabase OTP + set new password
+// User Reset Password — verify OTP + update password
 app.post('/api/user/reset-password', async (req, res) => {
     const { email, otp, newPassword } = req.body;
     if (!email || !otp || !newPassword) {
@@ -690,12 +700,21 @@ app.post('/api/user/reset-password', async (req, res) => {
     }
 
     try {
-        // Verify OTP via Supabase Auth
-        await verifySupabaseOTP(cleanEmail, otp);
+        const { rows: otpRows } = await pool.query(
+            `SELECT * FROM otp_verifications
+             WHERE email = $1 AND otp_code = $2 AND used = FALSE AND expires_at > NOW()
+             ORDER BY created_at DESC LIMIT 1`,
+            [cleanEmail, otp]
+        );
 
-        // Update password in our own DB
+        if (otpRows.length === 0) {
+            return res.status(400).json({ error: 'Invalid or expired code. Please request a new one.' });
+        }
+
+        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE id = $1`, [otpRows[0].id]);
+
         const newHash = bcrypt.hashSync(newPassword, 10);
-        const result = await pool.query(
+        const result  = await pool.query(
             `UPDATE users SET password_hash = $1 WHERE email = $2`,
             [newHash, cleanEmail]
         );
@@ -707,16 +726,7 @@ app.post('/api/user/reset-password', async (req, res) => {
         res.json({ success: true, message: 'Password reset successfully. You can now sign in.' });
     } catch (err) {
         console.error('Reset password error:', err.message);
-        const isOtpError = err.message && (
-            err.message.toLowerCase().includes('invalid') ||
-            err.message.toLowerCase().includes('expired') ||
-            err.message.toLowerCase().includes('token')
-        );
-        return res.status(400).json({
-            error: isOtpError
-                ? 'Invalid or expired code. Please request a new one.'
-                : 'Failed to reset password. Please try again.'
-        });
+        return res.status(500).json({ error: 'Failed to reset password. Please try again.' });
     }
 });
 
@@ -759,10 +769,17 @@ app.post("/api/otp/send", async (req, res) => {
     const { email, name } = req.body;
     if (!email) return res.status(400).json({ error: "Email is required." });
 
+    const otp       = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
     try {
-        // Send OTP via Supabase Auth (Supabase manages code generation + expiry)
+        await pool.query(`UPDATE otp_verifications SET used = TRUE WHERE email = $1 AND used = FALSE`, [email.toLowerCase()]);
+        await pool.query(
+            `INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)`,
+            [email.toLowerCase(), otp, expiresAt]
+        );
         try {
-            await sendOTPEmail(email.toLowerCase(), name || 'there', null);
+            await sendOTPEmail(email, name || 'there', otp);
         } catch (emailErr) {
             console.error('OTP resend email failed (non-fatal):', emailErr.message);
         }
