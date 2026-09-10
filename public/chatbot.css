@@ -1,0 +1,585 @@
+/* ============================================================
+   HARVEST ROOT — "NEED HELP" AI CHATBOT WIDGET STYLES
+   Harmonized with Harvest Root Design System:
+   - Fonts: Playfair Display (Serif) & Inter (Sans)
+   - Palette: Forest Green (#295337), Cream (#f4efeb), Sand (#e4d8c9), Warm Off-White (#faf8f5)
+   - Accents: Subtle Warm Gold (#daa84e / rgba(191,149,63,0.25))
+   - Liquid Glass & Pill Accents
+   ============================================================ */
+
+/* Floating Help Button Trigger */
+.hr-chat-trigger {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border-radius: 50px;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--white, #ffffff);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  text-decoration: none;
+
+  /* Signature Liquid Glass Finish matching navbar Sign In button */
+  background: linear-gradient(135deg, rgba(41, 83, 55, 0.92) 0%, rgba(55, 110, 73, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow:
+    0 8px 24px rgba(41, 83, 55, 0.28),
+    inset 0 1px 1px rgba(255, 255, 255, 0.45),
+    inset 0 10px 10px rgba(255, 255, 255, 0.12),
+    inset 0 -10px 10px rgba(0, 0, 0, 0.12);
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.hr-chat-trigger:hover {
+  transform: translateY(-3px) scale(1.03);
+  background: linear-gradient(135deg, rgba(55, 110, 73, 0.95) 0%, rgba(65, 130, 85, 1) 100%);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow:
+    0 12px 32px rgba(41, 83, 55, 0.38),
+    inset 0 1px 2px rgba(255, 255, 255, 0.6),
+    inset 0 14px 14px rgba(255, 255, 255, 0.2),
+    inset 0 -14px 14px rgba(0, 0, 0, 0.15);
+}
+
+.hr-chat-trigger:active {
+  transform: translateY(-1px) scale(0.99);
+}
+
+.hr-trigger-icon-wrap {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hr-trigger-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.3s ease;
+}
+
+.hr-chat-trigger:hover .hr-trigger-icon {
+  transform: rotate(-6deg) scale(1.08);
+}
+
+.hr-online-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: #27ae60;
+  border: 1.5px solid #295337;
+  border-radius: 50%;
+  animation: hrPulse 2.2s infinite;
+}
+
+@keyframes hrPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(39, 174, 96, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(39, 174, 96, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(39, 174, 96, 0);
+  }
+}
+
+.hr-trigger-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.hr-sparkle {
+  color: var(--gold-light, #daa84e);
+  font-size: 0.95rem;
+}
+
+/* Chat Widget Window */
+.hr-chat-window {
+  position: fixed;
+  bottom: 94px;
+  right: 28px;
+  width: 390px;
+  max-width: calc(100vw - 36px);
+  height: 600px;
+  max-height: calc(100vh - 125px);
+  background: var(--bg, #faf8f5);
+  border-radius: var(--radius-lg, 20px);
+  border: 1px solid rgba(191, 149, 63, 0.28);
+  box-shadow:
+    0 24px 60px rgba(44, 36, 32, 0.16),
+    0 4px 20px rgba(44, 36, 32, 0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 10000;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(24px) scale(0.95);
+  transform-origin: bottom right;
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  font-family: var(--font-sans, 'Inter', sans-serif);
+}
+
+.hr-chat-window.active {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+
+/* Header — Styled like Harvest Root's Cart Header */
+.hr-chat-header {
+  background: rgba(244, 239, 235, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 20px 24px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(191, 149, 63, 0.22);
+  position: relative;
+  z-index: 2;
+}
+
+.hr-chat-header-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hr-chat-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #ffffff;
+  padding: 4px;
+  border: 1px solid rgba(191, 149, 63, 0.35);
+  object-fit: contain;
+  box-shadow: 0 2px 8px rgba(44, 36, 32, 0.05);
+}
+
+.hr-chat-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hr-chat-title {
+  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
+  font-size: 1.18rem;
+  font-weight: 600;
+  color: var(--green, #295337);
+  line-height: 1.15;
+}
+
+.hr-chat-status {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-light, #6a6058);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hr-status-indicator {
+  width: 6px;
+  height: 6px;
+  background: #27ae60;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.hr-chat-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Circular Actions matching .cart-close */
+.hr-btn-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(191, 149, 63, 0.3);
+  background: var(--cream, #f4efeb);
+  color: var(--text-light, #6a6058);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+  outline: none;
+}
+
+.hr-btn-icon:hover {
+  background: var(--green, #295337);
+  color: var(--white, #ffffff);
+  border-color: var(--green, #295337);
+}
+
+.hr-btn-icon#hr-btn-close:hover {
+  transform: rotate(90deg);
+}
+
+/* Chat Messages Body */
+.hr-chat-body {
+  flex: 1;
+  padding: 20px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--bg, #faf8f5);
+  scroll-behavior: smooth;
+}
+
+.hr-chat-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.hr-chat-body::-webkit-scrollbar-thumb {
+  background: var(--sand, #e4d8c9);
+  border-radius: 10px;
+}
+
+/* Timestamp Divider */
+.hr-time-divider {
+  text-align: center;
+  font-size: 0.72rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-light, #6a6058);
+  font-weight: 500;
+  margin: 2px 0 6px 0;
+}
+
+/* Message Bubble */
+.hr-message {
+  display: flex;
+  flex-direction: column;
+  max-width: 86%;
+  animation: hrMessageFade 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@keyframes hrMessageFade {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hr-message.bot {
+  align-self: flex-start;
+}
+
+.hr-message.user {
+  align-self: flex-end;
+}
+
+.hr-bubble {
+  padding: 13px 18px;
+  border-radius: var(--radius-lg, 20px);
+  font-size: 0.88rem;
+  line-height: 1.65;
+  word-wrap: break-word;
+  position: relative;
+}
+
+/* Bot Bubble: Fresh clean card with subtle sand border */
+.hr-message.bot .hr-bubble {
+  background: #ffffff;
+  color: var(--text, #28221f);
+  border: 1px solid var(--sand, #e4d8c9);
+  border-top-left-radius: 4px;
+  box-shadow: 0 4px 16px rgba(44, 36, 32, 0.04);
+}
+
+/* User Bubble: Harvest Root signature green with subtle shadow */
+.hr-message.user .hr-bubble {
+  background: var(--green, #295337);
+  color: var(--white, #ffffff);
+  border-top-right-radius: 4px;
+  box-shadow: 0 6px 18px rgba(41, 83, 55, 0.22);
+}
+
+.hr-bubble p {
+  margin-bottom: 6px;
+}
+
+.hr-bubble p:last-child {
+  margin-bottom: 0;
+}
+
+.hr-bubble strong {
+  font-weight: 600;
+  color: inherit;
+}
+
+.hr-message.bot .hr-bubble strong {
+  color: var(--green, #295337);
+}
+
+.hr-bubble a {
+  color: var(--green, #295337);
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.hr-message.user .hr-bubble a {
+  color: #fcf6ba;
+}
+
+/* Quick Action Suggestion Chips */
+.hr-quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.hr-chip {
+  background: var(--cream, #f4efeb);
+  border: 1px solid rgba(191, 149, 63, 0.35);
+  color: var(--green, #295337);
+  padding: 7px 15px;
+  border-radius: 50px;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(44, 36, 32, 0.04);
+  outline: none;
+}
+
+.hr-chip:hover {
+  background: var(--green, #295337);
+  color: var(--white, #ffffff);
+  border-color: var(--green, #295337);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(41, 83, 55, 0.22);
+}
+
+/* Support Form Inside Bot Bubble */
+.hr-support-form {
+  background: var(--cream, #f4efeb);
+  border: 1px solid rgba(191, 149, 63, 0.3);
+  border-radius: var(--radius, 10px);
+  padding: 14px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hr-support-form input,
+.hr-support-form textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--sand, #e4d8c9);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  background: #ffffff;
+  color: var(--text, #28221f);
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.hr-support-form input:focus,
+.hr-support-form textarea:focus {
+  border-color: var(--green, #295337);
+  box-shadow: 0 0 0 3px rgba(41, 83, 55, 0.1);
+}
+
+.hr-support-form button {
+  background: var(--green, #295337);
+  color: var(--white, #ffffff);
+  border: none;
+  padding: 10px 16px;
+  border-radius: 50px;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+  box-shadow: 0 4px 12px rgba(41, 83, 55, 0.2);
+}
+
+.hr-support-form button:hover {
+  background: var(--green-light, #376e49);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(41, 83, 55, 0.3);
+}
+
+/* Typing Indicator */
+.hr-typing-bubble {
+  align-self: flex-start;
+  background: #ffffff;
+  border: 1px solid var(--sand, #e4d8c9);
+  border-radius: var(--radius-lg, 20px);
+  border-top-left-radius: 4px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  box-shadow: 0 4px 16px rgba(44, 36, 32, 0.04);
+}
+
+.hr-typing-bubble span {
+  width: 6px;
+  height: 6px;
+  background: var(--text-light, #6a6058);
+  border-radius: 50%;
+  display: inline-block;
+  animation: hrBounce 1.4s infinite ease-in-out both;
+}
+
+.hr-typing-bubble span:nth-child(1) { animation-delay: -0.32s; }
+.hr-typing-bubble span:nth-child(2) { animation-delay: -0.16s; }
+.hr-typing-bubble span:nth-child(3) { animation-delay: 0s; }
+
+@keyframes hrBounce {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
+  40% { transform: scale(1); opacity: 1; background: var(--green, #295337); }
+}
+
+/* Footer & Input Area — Soft Cream Glass */
+.hr-chat-footer {
+  padding: 14px 18px 12px;
+  background: rgba(244, 239, 235, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(191, 149, 63, 0.2);
+}
+
+.hr-input-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid var(--sand, #e4d8c9);
+  border-radius: 50px;
+  padding: 5px 6px 5px 16px;
+  box-shadow: 0 2px 8px rgba(44, 36, 32, 0.04);
+  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.hr-input-form:focus-within {
+  border-color: var(--green, #295337);
+  box-shadow: 0 0 0 3px rgba(41, 83, 55, 0.12), 0 4px 12px rgba(44, 36, 32, 0.06);
+}
+
+.hr-chat-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  font-size: 0.88rem;
+  color: var(--text, #28221f);
+  outline: none;
+}
+
+.hr-chat-input::placeholder {
+  color: var(--text-light, #6a6058);
+  opacity: 0.85;
+  font-size: 0.82rem;
+}
+
+.hr-send-btn {
+  width: 34px;
+  height: 34px;
+  background: var(--green, #295337);
+  color: var(--white, #ffffff);
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(41, 83, 55, 0.2);
+}
+
+.hr-send-btn:hover {
+  background: var(--green-light, #376e49);
+  transform: scale(1.06);
+  box-shadow: 0 4px 12px rgba(41, 83, 55, 0.3);
+}
+
+.hr-send-btn:disabled {
+  background: var(--sand, #e4d8c9);
+  color: var(--text-light, #6a6058);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.hr-send-btn svg {
+  width: 16px;
+  height: 16px;
+  transform: translateX(1px);
+}
+
+/* Tagline */
+.hr-powered-by {
+  text-align: center;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-light, #6a6058);
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+/* Mobile Responsive */
+@media (max-width: 480px) {
+  .hr-chat-trigger {
+    bottom: 20px;
+    right: 20px;
+    padding: 10px 18px;
+    font-size: 0.84rem;
+  }
+
+  .hr-chat-window {
+    bottom: 0;
+    right: 0;
+    width: 100vw;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    border-radius: 0;
+    border: none;
+  }
+}

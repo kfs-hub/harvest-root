@@ -819,6 +819,332 @@ app.post("/api/otp/verify", async (req, res) => {
 
 // ===== API ROUTES =====
 
+// 0. AI Chatbot Assistant
+app.post('/api/chat', async (req, res) => {
+    const { message, history } = req.body;
+    if (!message || typeof message !== 'string') {
+        return res.status(400).json({ error: 'Message is required.' });
+    }
+
+    const trimmedMsg = message.trim();
+    const lower = trimmedMsg.toLowerCase();
+
+    try {
+        // Fetch current active store products for live context
+        let productList = [];
+        try {
+            const { rows } = await pool.query('SELECT id, name, price, unit, stock, origin FROM products ORDER BY id ASC');
+            productList = rows;
+        } catch (e) {
+            productList = [
+                { name: 'Tellicherry Black Pepper', price: 169, unit: '100g', stock: 50, origin: 'Coorg Estate' },
+                { name: 'Whole Cloves', price: 420, unit: '100g', stock: 50, origin: 'Coorg Hills' },
+                { name: 'Green Cardamom', price: 580, unit: '100g', stock: 50, origin: 'Western Ghats' },
+                { name: 'Cinnamon Sticks', price: 310, unit: '100g', stock: 0, origin: 'Coorg Plantation' }
+            ];
+        }
+
+        // 1. Check for Order ID lookup (e.g., "#12" or "order 12" or "track 12")
+        const orderMatch = lower.match(/(?:order\s*(?:#|no\.?|id)?\s*|#\s*)(\d+)/i);
+        if (orderMatch && orderMatch[1]) {
+            const orderId = parseInt(orderMatch[1], 10);
+            try {
+                const { rows } = await pool.query('SELECT id, customer_name, total_amount, status, created_at FROM orders WHERE id = $1', [orderId]);
+                if (rows.length > 0) {
+                    const o = rows[0];
+                    const dateFormatted = new Date(o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                    const statusFormatted = (o.status || 'pending').toUpperCase();
+                    return res.json({
+                        reply: `📦 **Order Status for #${o.id}**:\n• Customer: **${o.customer_name}**\n• Status: **${statusFormatted}**\n• Total: **₹${o.total_amount}**\n• Placed: **${dateFormatted}**\n\nYour spices are packaged with extreme care to maintain aroma and freshness!`,
+                        chips: [
+                            { label: '🚚 Shipping Policy', query: 'When will my order be delivered?' },
+                            { label: '💬 Need more help', query: 'I have an issue with my order' }
+                        ]
+                    });
+                } else {
+                    return res.json({
+                        reply: `🔍 I searched our records, but couldn't find an order with **ID #${orderId}**.\n\nPlease check your confirmation email for the exact number, or leave a message for our support staff below!`,
+                        isSupportForm: true
+                    });
+                }
+            } catch (err) {
+                console.error('Error looking up order in chat:', err.message);
+            }
+        }
+
+        // 2. Check if external Gemini API Key is configured in environment
+        if (process.env.GEMINI_API_KEY) {
+            try {
+                const catalogContext = productList.map(p => `- ${p.name} (${p.origin}): ₹${p.price}/${p.unit} [${p.stock > 0 ? 'In Stock' : 'Out of Stock'}]`).join('\n');
+                const systemPrompt = `You are "Harvest Assistant", the friendly, knowledgeable AI helper for Harvest Root (harvestroot.in), a premium spice brand from Coorg, Karnataka, India.
+Harvest Root heritage: 3rd-generation family plantation in Western Ghats, Coorg. Sun-dried, handpicked, natural, chemical-free spices.
+Current Store Products:\n${catalogContext}
+Shipping rules: FREE delivery across India on orders over ₹500. Standard ₹50 under ₹500. Dispatch within 24 hours, delivered in 3-5 business days.
+Returns: 48-hour replacement guarantee for damaged packages.
+Payments: UPI, Cards, Net Banking.
+Customer can also leave a message for support.
+Keep responses concise, polite, helpful, and formatted with markdown bullet points where appropriate. Do not invent products outside the catalog.`;
+
+                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+                const geminiPayload = {
+                    contents: [
+                        { role: 'user', parts: [{ text: `${systemPrompt}\n\nCustomer asks: ${trimmedMsg}` }] }
+                    ]
+                };
+
+                const geminiRes = await fetch(geminiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(geminiPayload)
+                });
+
+                if (geminiRes.ok) {
+                    const geminiData = await geminiRes.json();
+                    const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (text) {
+                        return res.json({ reply: text });
+                    }
+                }
+            } catch (geminiErr) {
+                console.warn('Gemini API call failed, falling back to built-in knowledge engine:', geminiErr.message);
+            }
+        }
+
+        // 3. Built-in Knowledge & Intent Resolver (High accuracy, zero latency)
+
+        // Cart Inquiries & Cart Actions
+        if (lower.includes('cart') || lower.includes('basket') || lower.includes('bag')) {
+            const clientCart = Array.isArray(req.body.cart) ? req.body.cart : [];
+            if (clientCart.length > 0) {
+                const totalQty = clientCart.reduce((s, i) => s + (parseInt(i.qty) || 1), 0);
+                const totalVal = clientCart.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
+                const itemsList = clientCart.map(i => `• **${i.qty || 1}x** ${i.name} — ₹${(i.price || 0) * (i.qty || 1)}`).join('\n');
+                const shippingNote = totalVal >= 500 ? '🎉 You qualify for **FREE Delivery**!' : `Add **₹${500 - totalVal}** more for **FREE Delivery**!`;
+
+                return res.json({
+                    reply: `🛒 **Your Shopping Cart:**\nYou currently have **${totalQty} item${totalQty > 1 ? 's' : ''}** in your cart (Total: **₹${totalVal}**):\n\n${itemsList}\n\n${shippingNote}\n\nYou can open your cart drawer anytime by clicking the **cart icon (🛒)** in the top right navbar.`,
+                    chips: [
+                        { label: '🛒 Open My Cart', query: 'open cart' },
+                        { label: '💳 How to Checkout', query: 'how do i checkout?' },
+                        { label: '🚚 Shipping Policy', query: 'what is shipping policy?' }
+                    ],
+                    action: 'open_cart'
+                });
+            } else {
+                return res.json({
+                    reply: `🛒 **Viewing Your Cart:**\nYou can see your cart anytime by clicking the **cart icon (🛒)** at the top right of the navigation bar.\n\nYour cart is currently **empty**. Browse our [Spice Collection](#products) to add fresh Coorg spices!`,
+                    chips: [
+                        { label: '🛒 Open Cart', query: 'open cart' },
+                        { label: '🌿 Explore Spices', query: 'what spices do you sell?' }
+                    ],
+                    action: 'open_cart'
+                });
+            }
+        }
+
+        // Checkout & Ordering
+        if (lower.includes('checkout') || lower.includes('how to buy') || lower.includes('how to order') || lower.includes('place order') || lower.includes('how do i buy') || lower.includes('purchase')) {
+            return res.json({
+                reply: `🛍️ **How to Place an Order:**\n1. Browse our spices below and click **'Add to Cart'**.\n2. Click the **Cart (🛒)** icon at the top right of your screen.\n3. Click **'Proceed to Checkout'** in the cart drawer.\n4. Enter your shipping address and pay securely via **UPI, Credit/Debit Card, or Net Banking**!\n\nAll orders over ₹500 get **FREE Shipping** across India!`,
+                chips: [
+                    { label: '🛒 Open Cart', query: 'open cart' },
+                    { label: '💳 Payment Methods', query: 'what payment methods do you accept?' },
+                    { label: '🌿 Browse Spices', query: 'what spices do you sell?' }
+                ]
+            });
+        }
+
+        // Discounts, Offers & Coupons
+        if (lower.includes('discount') || lower.includes('coupon') || lower.includes('promo') || lower.includes('offer') || lower.includes('sale') || lower.includes('deal') || lower.includes('cheap')) {
+            return res.json({
+                reply: `🎁 **Current Offers & Savings at Harvest Root:**\n• **FREE Shipping:** All orders above **₹500** qualify for complimentary delivery across India!\n• **Direct Farm Pricing:** Because we grow and harvest our spices directly on our 3rd-generation Coorg plantation, you skip middlemen markups for authentic Tellicherry-grade spices.`,
+                chips: [
+                    { label: '🚚 Shipping details', query: 'how does shipping work?' },
+                    { label: '🌿 View Spices', query: 'show me your spices' }
+                ]
+            });
+        }
+
+        // Chai / Tea Spice Blend
+        if (lower.includes('chai') || lower.includes('tea')) {
+            return res.json({
+                reply: `☕ **The Perfect Coorg Chai Recipe:**\nFor the ultimate aromatic spiced tea:\n1. Lightly crush **2 Green Cardamom pods**, **2 Whole Cloves**, and a small piece of **Cinnamon Stick**.\n2. Simmer with water and milk, then add your tea leaves.\n3. Add a dash of crushed **Black Pepper** for extra warmth and immunity!\n\nAll four spices are available right here in our store.`,
+                chips: [
+                    { label: '🌿 View Chai Spices', query: 'what spices do you sell?' },
+                    { label: '🛒 Open Cart', query: 'open cart' }
+                ]
+            });
+        }
+
+        // Biryani Spices
+        if (lower.includes('biryani') || lower.includes('curry') || lower.includes('meat') || lower.includes('cooking')) {
+            return res.json({
+                reply: `🍚 **Royal Spices for Biryani & Curries:**\nOur whole spices are hand-sorted for maximum essential oils:\n• **Tellicherry Black Pepper** for warm, lingering heat.\n• **Whole Cloves** for deep pungent richness.\n• **Green Cardamom** for royal floral fragrance.\n• **Cinnamon Sticks** for subtle sweet warmth.\n\nTemper them in hot ghee at the beginning of cooking for maximum aroma!`,
+                chips: [
+                    { label: '🌿 Explore Spices', query: 'what spices do you sell?' }
+                ]
+            });
+        }
+
+        // Storage & Shelf Life
+        if (lower.includes('store') || lower.includes('storage') || lower.includes('shelf life') || lower.includes('expiry') || lower.includes('expire') || lower.includes('how long')) {
+            return res.json({
+                reply: `🍃 **Spice Storage & Freshness Tips:**\n• Keep whole spices in an airtight glass or ceramic container in a cool, dry pantry.\n• Avoid storing directly above the stove or under sunlight.\n• When stored properly, our sun-dried whole spices maintain peak aroma and flavor for **12 to 18 months**!`,
+                chips: [
+                    { label: '🌿 Our Collection', query: 'tell me about your spices' }
+                ]
+            });
+        }
+
+        // Account, Sign In, Login
+        if (lower.includes('sign in') || lower.includes('login') || lower.includes('account') || lower.includes('register') || lower.includes('password') || lower.includes('profile')) {
+            return res.json({
+                reply: `👤 **Account & Sign In:**\nYou can sign in by clicking **'Sign In'** in the top navigation bar. We support instant **Google Sign In** as well as email/password. Having an account lets you save addresses and track your orders easily!`,
+                chips: [
+                    { label: '🔍 Track an Order', query: 'how do i track my order?' },
+                    { label: '💬 Talk to Support', query: 'i need help with my account' }
+                ]
+            });
+        }
+
+        // Specific Spice: Pepper
+        if (lower.includes('black pepper') || lower.includes('peppercorn')) {
+            return res.json({
+                reply: `🌿 **Tellicherry Black Pepper (Coorg Estate):**\n• **Price:** ₹200 / 100g *(In Stock)*\n• **Origin:** High-elevation estate in Coorg.\n• **Profile:** Sun-dried bold berries with high piperine content, pungent bite, and complex fruity notes.\n• **Health benefits:** Boosts digestion, immunity, and nutrient absorption.`,
+                chips: [
+                    { label: '🛒 Browse All Spices', query: 'what spices do you sell?' },
+                    { label: '🚚 Shipping rates', query: 'is shipping free?' }
+                ]
+            });
+        }
+
+        // Specific Spice: Cardamom
+        if (lower.includes('cardamom') || lower.includes('elaichi')) {
+            return res.json({
+                reply: `🌿 **Green Cardamom (Western Ghats):**\n• **Price:** ₹580 / 100g *(In Stock)*\n• **Origin:** Western Ghats canopy plantation.\n• **Profile:** Plump, vibrant green pods with sweet, floral eucalyptus notes.\n• **Best for:** Chai, biryani, desserts, and natural breath freshening.`,
+                chips: [
+                    { label: '☕ Chai Recipe', query: 'how to make spiced chai?' },
+                    { label: '🛒 Browse All Spices', query: 'what spices do you sell?' }
+                ]
+            });
+        }
+
+        // Specific Spice: Cloves
+        if (lower.includes('clove') || lower.includes('laung')) {
+            return res.json({
+                reply: `🌿 **Whole Cloves (Coorg Hills):**\n• **Price:** ₹200 / 100g *(In Stock)*\n• **Origin:** Coorg Hills.\n• **Profile:** Intensely fragrant, hand-sorted whole buds rich in natural eugenol.\n• **Best for:** Curries, masala chai, mulled beverages, and dental care.`,
+                chips: [
+                    { label: '🛒 Browse All Spices', query: 'what spices do you sell?' }
+                ]
+            });
+        }
+
+        // Specific Spice: Cinnamon
+        if (lower.includes('cinnamon') || lower.includes('dalchini')) {
+            return res.json({
+                reply: `🌿 **Cinnamon Sticks (Coorg Plantation):**\n• **Price:** ₹310 / 100g *(In Stock)*\n• **Origin:** Coorg Plantation.\n• **Profile:** Authentic Ceylon-style sweet quills with delicate, papery rolled layers.\n• **Best for:** Tea, curries, oatmeal, baking, and healthy blood sugar management.`,
+                chips: [
+                    { label: '🛒 Browse All Spices', query: 'what spices do you sell?' }
+                ]
+            });
+        }
+
+        // All Spices & Products
+        if (lower.includes('spice') || lower.includes('product') || lower.includes('shop') || lower.includes('catalog')) {
+            const lines = productList.map(p => {
+                const stockText = p.stock > 0 ? (p.stock <= 10 ? `⚠️ Only ${p.stock} left` : '✓ In Stock') : '❌ Sold Out';
+                return `• **${p.name}** (${p.origin}) — **₹${p.price}** / ${p.unit} *(${stockText})*`;
+            }).join('\n');
+
+            return res.json({
+                reply: `🌿 **Harvest Root Farm-Fresh Spices:**\n${lines}\n\nAll our spices are 100% natural, sun-dried, and sourced directly from our Coorg family plantation without any middlemen.`,
+                chips: [
+                    { label: '🚚 Free Shipping details', query: 'Is shipping free?' },
+                    { label: '🏔️ About Coorg plantation', query: 'Tell me about your farm in Coorg' }
+                ]
+            });
+        }
+
+        if (lower.includes('ship') || lower.includes('deliver') || lower.includes('time') || lower.includes('courier') || lower.includes('charge') || lower.includes('cost') || lower.includes('pincode')) {
+            return res.json({
+                reply: `🚚 **Shipping & Delivery Information:**\n• **FREE Delivery** across India on all orders over **₹500**!\n• For orders below ₹500, a small ₹50 standard shipping fee applies.\n• Orders are dispatched from Coorg within **24 hours**.\n• Delivery takes **3–5 business days** depending on your location, with real-time SMS/email tracking.`,
+                chips: [
+                    { label: '💳 Payment Methods', query: 'What payment methods do you accept?' },
+                    { label: '🌿 View Spices', query: 'Show me your spices' }
+                ]
+            });
+        }
+
+        if (lower.includes('coorg') || lower.includes('origin') || lower.includes('farm') || lower.includes('story') || lower.includes('about') || lower.includes('organic') || lower.includes('location') || lower.includes('where are you')) {
+            return res.json({
+                reply: `🏔️ **Our Story & Heritage:**\nHarvest Root is a **3rd-generation family venture** located in the misty highlands of Coorg, Karnataka.\n\nOur spice plants grow beneath the canopy of native silver oak and rosewood trees. Every peppercorn is naturally sun-dried, and every clove and cardamom pod is handpicked at peak ripeness to preserve essential oils and intense flavor.`,
+                chips: [
+                    { label: '🛒 Browse Spices', query: 'Show me your spices' },
+                    { label: '📦 Shipping info', query: 'How does shipping work?' }
+                ]
+            });
+        }
+
+        if (lower.includes('pay') || lower.includes('upi') || lower.includes('card') || lower.includes('cod') || lower.includes('cash')) {
+            return res.json({
+                reply: `💳 **Payments & Security:**\n• We accept all major **UPI** apps (Google Pay, PhonePe, Paytm), Credit & Debit Cards, and Net Banking.\n• All payments are processed through 256-bit encrypted secure gateways.\n• To order, add your spices to cart and click **Proceed to Checkout**!`,
+                chips: [
+                    { label: '📦 Shipping details', query: 'How much is shipping?' },
+                    { label: '💬 Talk to Support', query: 'I have a payment problem' }
+                ]
+            });
+        }
+
+        if (lower.includes('return') || lower.includes('refund') || lower.includes('replace') || lower.includes('damage') || lower.includes('cancel')) {
+            return res.json({
+                reply: `🛡️ **Freshness Guarantee & Returns:**\nBecause our spices are pure food items, we maintain high safety standards. If any package arrives damaged or unsealed, notify us within **48 hours** of delivery, and we will immediately issue a free replacement or full refund!`,
+                chips: [
+                    { label: '💬 Contact Support Team', query: 'I need a replacement or refund' }
+                ]
+            });
+        }
+
+        if (lower.includes('support') || lower.includes('human') || lower.includes('agent') || lower.includes('contact') || lower.includes('help') || lower.includes('executive') || lower.includes('call') || lower.includes('mail')) {
+            return res.json({
+                reply: `👋 **Direct Support Escalation:**\nOur customer care team is at your service! Please fill out your message below, and an executive will contact you right away:`,
+                isSupportForm: true
+            });
+        }
+
+        if (lower.match(/^(hi|hello|hey|greetings|good morning|good afternoon|good evening)/)) {
+            return res.json({
+                reply: `Hello there! 🌿 Welcome to **Harvest Root**.\nHow can I help you today? Feel free to ask about our spices, your cart, shipping, order tracking, or our Coorg plantation!`,
+                chips: [
+                    { label: '🛒 See My Cart', query: 'how do i see my cart?' },
+                    { label: '🌿 Our Spices', query: 'Tell me about your spices' },
+                    { label: '🚚 Shipping Policy', query: 'What is your shipping policy?' }
+                ]
+            });
+        }
+
+        if (lower.includes('thank') || lower.includes('bye') || lower.includes('great') || lower.includes('awesome')) {
+            return res.json({
+                reply: `You're most welcome! Enjoy cooking with pure, aromatic Coorg spices. Let us know anytime if you have questions. 🍃`
+            });
+        }
+
+        // Default reply
+        return res.json({
+            reply: `I'm happy to help! You can ask about our **spices & prices**, **your cart**, **free shipping rules**, **tracking your order** (just type "Order #..." with your ID), or you can leave a note for our support team below:`,
+            chips: [
+                { label: '🛒 View Cart', query: 'how do i see my cart?' },
+                { label: '🌿 Explore Spices', query: 'What spices do you have?' },
+                { label: '🚚 Delivery Policy', query: 'How long does delivery take?' },
+                { label: '💬 Contact Support', query: 'I need to contact customer support' }
+            ]
+        });
+
+    } catch (err) {
+        console.error('Error in /api/chat:', err);
+        return res.status(500).json({ error: 'Failed to process chat message.' });
+    }
+});
+
 // 1. Contact Form
 app.post('/api/contact', async (req, res) => {
     const { name, email, message } = req.body;
