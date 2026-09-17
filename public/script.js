@@ -361,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 const sections = document.querySelectorAll('section[id]');
 window.addEventListener('scroll', () => {
+  if (!document.getElementById('home')) return;
   const scrollY = window.scrollY + 200;
   sections.forEach(section => {
     const top = section.offsetTop;
@@ -485,6 +486,11 @@ function initAnimations() {
       chips.forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       inquiryInput.value = chip.dataset.chip;
+      if (chip.dataset.chip === 'Data Privacy') {
+        msgInput.placeholder = 'Please specify your data access, update, or deletion request...';
+      } else {
+        msgInput.placeholder = "Tell us what you're looking for...";
+      }
     });
   });
 
@@ -697,3 +703,8 @@ if (navLogoutBtn) {
 fetchProducts();
 updateCart();
 checkUserSession();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAnimations);
+} else {
+  initAnimations();
+}

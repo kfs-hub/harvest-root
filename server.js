@@ -878,11 +878,14 @@ app.post('/api/chat', async (req, res) => {
                 const catalogContext = productList.map(p => `- ${p.name} (${p.origin}): ₹${p.price}/${p.unit} [${p.stock > 0 ? 'In Stock' : 'Out of Stock'}]`).join('\n');
                 const systemPrompt = `You are "Harvest Assistant", the friendly, knowledgeable AI helper for Harvest Root (harvestroot.in), a premium spice brand from Coorg, Karnataka, India.
 Harvest Root heritage: 3rd-generation family plantation in Western Ghats, Coorg. Sun-dried, handpicked, natural, chemical-free spices.
-Current Store Products:\n${catalogContext}
-Shipping rules: FREE delivery across India on orders over ₹500. Standard ₹50 under ₹500. Dispatch within 24 hours, delivered in 3-5 business days.
-Returns: 48-hour replacement guarantee for damaged packages.
-Payments: UPI, Cards, Net Banking.
-Customer can also leave a message for support.
+Store Navigation & Shop: The catalog is now on our dedicated Shop Page (shop.html). Users can browse products, add to cart, and checkout at checkout.html. External marketplaces (Amazon, Flipkart) are linked on shop.html#marketplaces.
+Current Store Products:
+${catalogContext}
+Shipping rules: FREE delivery across India on orders over ₹500. Standard ₹50 under ₹500. Dispatch within 24 hours from Coorg, delivered in 3-5 business days.
+Refund & Cancellation Policy (refund.html): Food safety & hygiene standard — sealed food packages cannot be returned once opened. 48-hour replacement or 100% refund for transit damage or defective packages with photo proof. Cancellations permitted anytime before parcel dispatch. Approved refunds processed to original payment method in 5-7 business days.
+Privacy Policy (privacy.html): DPDP Act compliant. Zero data selling guarantee. Essential session/cart cookies only. Data deletion requests handled via email to harvestroot2020@gmail.com within 7 business days.
+Terms of Service (terms.html): All prices in INR inclusive of taxes. Governed under jurisdiction of Coorg / Karnataka courts.
+Payments: UPI (GPay, PhonePe, Paytm), Cards, Net Banking.
 Keep responses concise, polite, helpful, and formatted with markdown bullet points where appropriate. Do not invent products outside the catalog.`;
 
                 const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -932,7 +935,7 @@ Keep responses concise, polite, helpful, and formatted with markdown bullet poin
                 });
             } else {
                 return res.json({
-                    reply: `🛒 **Viewing Your Cart:**\nYou can see your cart anytime by clicking the **cart icon (🛒)** at the top right of the navigation bar.\n\nYour cart is currently **empty**. Browse our [Spice Collection](#products) to add fresh Coorg spices!`,
+                    reply: `🛒 **Viewing Your Cart:**\nYou can see your cart anytime by clicking the **cart icon (🛒)** at the top right of the navigation bar.\n\nYour cart is currently **empty**. Browse our [Spice Collection](shop.html) to add fresh Coorg spices!`,
                     chips: [
                         { label: '🛒 Open Cart', query: 'open cart' },
                         { label: '🌿 Explore Spices', query: 'what spices do you sell?' }
@@ -945,11 +948,12 @@ Keep responses concise, polite, helpful, and formatted with markdown bullet poin
         // Checkout & Ordering
         if (lower.includes('checkout') || lower.includes('how to buy') || lower.includes('how to order') || lower.includes('place order') || lower.includes('how do i buy') || lower.includes('purchase')) {
             return res.json({
-                reply: `🛍️ **How to Place an Order:**\n1. Browse our spices below and click **'Add to Cart'**.\n2. Click the **Cart (🛒)** icon at the top right of your screen.\n3. Click **'Proceed to Checkout'** in the cart drawer.\n4. Enter your shipping address and pay securely via **UPI, Credit/Debit Card, or Net Banking**!\n\nAll orders over ₹500 get **FREE Shipping** across India!`,
+                reply: `🛍️ **How to Place an Order:**\n1. Visit our dedicated **[Shop Page](shop.html)** and click **'Add to Cart'** on any spice.\n2. Click the **Cart (🛒)** icon at the top right of your screen.\n3. Click **'Proceed to Checkout'** in the cart drawer.\n4. Enter your shipping address, agree to our [Terms](terms.html) and [Privacy Policy](privacy.html), and pay securely via **UPI, Cards, or Net Banking**!\n\nAll orders over ₹500 get **FREE Shipping** across India!`,
                 chips: [
+                    { label: '🌿 Open Shop', query: 'what spices do you sell?' },
                     { label: '🛒 Open Cart', query: 'open cart' },
                     { label: '💳 Payment Methods', query: 'what payment methods do you accept?' },
-                    { label: '🌿 Browse Spices', query: 'what spices do you sell?' }
+                    { label: '🛡️ Refund Policy', query: 'what is your refund policy?' }
                 ]
             });
         }
@@ -1095,11 +1099,46 @@ Keep responses concise, polite, helpful, and formatted with markdown bullet poin
             });
         }
 
-        if (lower.includes('return') || lower.includes('refund') || lower.includes('replace') || lower.includes('damage') || lower.includes('cancel')) {
+        // Refund, Return & Cancellation Policy
+        if (lower.includes('return') || lower.includes('refund') || lower.includes('replace') || lower.includes('damage') || lower.includes('cancel') || lower.includes('broken')) {
             return res.json({
-                reply: `🛡️ **Freshness Guarantee & Returns:**\nBecause our spices are pure food items, we maintain high safety standards. If any package arrives damaged or unsealed, notify us within **48 hours** of delivery, and we will immediately issue a free replacement or full refund!`,
+                reply: `🛡️ **Refund & Cancellation Policy:**\n• **Food Safety Standard:** Because our spices are pure food items, unsealed or opened packages cannot be returned for health and hygiene safety.\n• **Transit Damage / Defective:** If an item arrives damaged or unsealed, notify us within **48 hours** with photo proof. We will promptly issue a free replacement or 100% refund!\n• **Order Cancellations:** You can cancel orders free of charge anytime **before dispatch** from our Coorg warehouse.\n• **Refund Timeline:** Approved refunds are processed to your original payment method in **5–7 business days**.\n\nRead our full [Refund & Cancellation Policy](refund.html).`,
                 chips: [
+                    { label: '📜 Terms of Service', query: 'What are your terms of service?' },
                     { label: '💬 Contact Support Team', query: 'I need a replacement or refund' }
+                ]
+            });
+        }
+
+        // Privacy Policy & Data Deletion
+        if (lower.includes('privacy') || lower.includes('data') || lower.includes('delete my data') || lower.includes('delete data') || lower.includes('dpdp') || lower.includes('personal info') || lower.includes('cookie')) {
+            return res.json({
+                reply: `🔒 **Privacy & Data Protection (DPDP Compliant):**\n• **Strict Zero Data Selling:** We strictly NEVER sell, rent, or trade your personal data.\n• **Collected Info:** Only your name, email, phone, and delivery address strictly to fulfill spice orders and send delivery tracking.\n• **Cookies:** Only essential session & shopping cart cookies are used (no advertising trackers).\n• **Data Deletion Rights:** You can request complete deletion of your account and personal records anytime by emailing **harvestroot2020@gmail.com** with subject *"Data Deletion Request"* (processed within 7 business days).\n\nRead our full [Privacy Policy](privacy.html).`,
+                chips: [
+                    { label: '📜 Terms of Service', query: 'What are your terms of service?' },
+                    { label: '🛡️ Refund Policy', query: 'What is your refund policy?' }
+                ]
+            });
+        }
+
+        // Terms of Service & Legal
+        if (lower.includes('term') || lower.includes('terms') || lower.includes('condition') || lower.includes('tos') || lower.includes('legal') || lower.includes('jurisdiction')) {
+            return res.json({
+                reply: `📜 **Terms of Service:**\n• **Transparent Pricing:** All spice prices are in Indian Rupees (₹), inclusive of applicable taxes.\n• **Dispatch & Delivery:** Orders are dispatched in 24 hours from Coorg with Pan-India tracking.\n• **Authenticity:** All products are guaranteed 100% single-origin, chemical-free estate spices.\n• **Governing Law:** Governed under the jurisdiction of courts in **Coorg / Karnataka, India**.\n\nRead our full [Terms of Service](terms.html).`,
+                chips: [
+                    { label: '🔒 Privacy Policy', query: 'What is your privacy policy?' },
+                    { label: '🛡️ Refund Policy', query: 'What is your refund policy?' }
+                ]
+            });
+        }
+
+        // Marketplaces (Amazon / Flipkart) vs Direct Shop
+        if (lower.includes('amazon') || lower.includes('flipkart') || lower.includes('marketplace') || lower.includes('other site') || lower.includes('where else to buy')) {
+            return res.json({
+                reply: `🛒 **Where to Buy Harvest Root Spices:**\n• **Direct Website (Recommended):** Order directly from our **[Shop Page](shop.html)** for the freshest batches, direct estate pricing, free delivery above ₹500, and direct farm support!\n• **Amazon & Flipkart:** You can also find our verified brand storefronts on major marketplaces. Check out the [Marketplace Links on our Shop page](shop.html#marketplaces).`,
+                chips: [
+                    { label: '🌿 Open Shop Page', query: 'what spices do you sell?' },
+                    { label: '🚚 Shipping Policy', query: 'what is your shipping policy?' }
                 ]
             });
         }

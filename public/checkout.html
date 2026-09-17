@@ -42,6 +42,12 @@
                             <textarea id="address" name="address" rows="3" placeholder="Enter your full delivery address..." required></textarea>
                         </div>
                         <button type="submit" class="btn btn-primary btn-full" id="place-order-btn">Place Order</button>
+                        <p class="checkout-legal-notice" style="font-size: 0.78rem; color: var(--text-light); text-align: center; margin-top: 12px; line-height: 1.5;">
+                            By placing your order, you agree to our 
+                            <a href="terms.html" target="_blank" style="color: var(--green); text-decoration: underline;">Terms of Service</a>, 
+                            <a href="privacy.html" target="_blank" style="color: var(--green); text-decoration: underline;">Privacy Policy</a>, and 
+                            <a href="refund.html" target="_blank" style="color: var(--green); text-decoration: underline;">Refund Policy</a>.
+                        </p>
                     </form>
                 </div>
 
@@ -51,7 +57,18 @@
                     <div class="summary-items" id="summary-items">
                         <!-- Items rendered by JS -->
                     </div>
-                    <div class="summary-total">
+                    <div class="summary-breakdown" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--sand);">
+                        <div style="display:flex; justify-content:space-between; margin-bottom: 8px; color: var(--text-light); font-size: 0.95rem;">
+                            <span>Subtotal</span>
+                            <span id="summary-subtotal-price" style="font-weight: 500; color: var(--text);">₹0</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom: 6px; color: var(--text-light); font-size: 0.95rem;">
+                            <span>Shipping</span>
+                            <span id="summary-shipping-price" style="font-weight: 500; color: var(--text);">₹0</span>
+                        </div>
+                        <div id="shipping-threshold-hint" style="font-size: 0.8rem; color: var(--green); margin-bottom: 12px; font-weight: 500;"></div>
+                    </div>
+                    <div class="summary-total" style="margin-top: 8px; padding-top: 16px;">
                         <span>Total</span>
                         <span id="summary-total-price">₹0</span>
                     </div>

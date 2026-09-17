@@ -3,6 +3,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     const itemsContainer = document.getElementById('summary-items');
     const totalEl = document.getElementById('summary-total-price');
+    const subtotalEl = document.getElementById('summary-subtotal-price');
+    const shippingEl = document.getElementById('summary-shipping-price');
+    const shippingHintEl = document.getElementById('shipping-threshold-hint');
     const form = document.getElementById('checkout-form');
     const placeBtn = document.getElementById('place-order-btn');
 
@@ -32,12 +35,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
+    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    const shipping = cart.length === 0 ? 0 : (subtotal >= 500 ? 0 : 50);
+    const total = subtotal + shipping;
+
     if (cart.length === 0) {
         itemsContainer.innerHTML = '<p class="empty-cart-msg">Your cart is empty.</p>';
+        if (subtotalEl) subtotalEl.textContent = '₹0';
+        if (shippingEl) shippingEl.textContent = '₹0';
+        if (shippingHintEl) shippingHintEl.textContent = '';
         totalEl.textContent = '₹0';
         placeBtn.disabled = true;
     } else {
-        const total = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        if (subtotalEl) subtotalEl.textContent = `₹${subtotal.toLocaleString()}`;
+        if (shippingEl) shippingEl.textContent = shipping === 0 ? 'FREE' : `₹${shipping}`;
+        if (shippingHintEl) {
+            if (shipping === 0) {
+                shippingHintEl.textContent = '✓ You unlocked Free Shipping (orders over ₹500)';
+            } else {
+                shippingHintEl.textContent = `Standard flat fee: ₹50. Add ₹${500 - subtotal} more for Free Shipping!`;
+            }
+        }
         totalEl.textContent = `₹${total.toLocaleString()}`;
         
         itemsContainer.innerHTML = cart.map(item => `
@@ -61,7 +79,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const customerName = document.getElementById('name').value;
         const customerEmail = document.getElementById('email').value;
         const customerAddress = document.getElementById('address').value;
-        const total = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        const currentSubtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        const currentShipping = currentSubtotal >= 500 ? 0 : 50;
+        const currentTotal = currentSubtotal + currentShipping;
 
         // Save address to user profile for future orders
         if (customerAddress && currentUser) {
@@ -80,7 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             customerEmail,
             customerAddress,
             cartItems: cart,
-            totalAmount: total
+            totalAmount: currentTotal
         };
 
         placeBtn.disabled = true;

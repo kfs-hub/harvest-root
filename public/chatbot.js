@@ -18,9 +18,10 @@
   // Default initial quick chips
   const INITIAL_CHIPS = [
     { label: '🌿 Our Spices & Origin', query: 'Tell me about your spices and origin' },
-    { label: '🚚 Shipping & Free Delivery', query: 'What are your shipping rates and delivery times?' },
+    { label: '🚚 Shipping & Delivery', query: 'What are your shipping rates and delivery times?' },
+    { label: '🛡️ Refund & Returns', query: 'What is your refund and cancellation policy?' },
+    { label: '📜 Privacy & Terms', query: 'What are your privacy policy and terms of service?' },
     { label: '📦 Track My Order', query: 'How do I track my order status?' },
-    { label: '💳 Payment & Returns', query: 'What payment methods and return policies do you have?' },
     { label: '📩 Contact Support', query: 'I want to contact human support' }
   ];
 
@@ -454,7 +455,7 @@
       } else {
         return {
           role: 'bot',
-          text: `🛒 **Viewing Your Cart:**<br>You can view your cart anytime by clicking the **cart icon (🛒)** at the top right of the navigation bar, or click below to open it right now:<br><br><button type="button" class="hr-chip" onclick="window.HarvestChatbotOpenCart()" style="background:var(--green);color:white;cursor:pointer;">🛒 Open Cart Drawer</button><br><br>Your cart is currently **empty**. Browse our collection to add fresh Coorg spices!`,
+          text: `🛒 **Viewing Your Cart:**<br>You can view your cart anytime by clicking the **cart icon (🛒)** at the top right of the navigation bar, or click below to open it right now:<br><br><button type="button" class="hr-chip" onclick="window.HarvestChatbotOpenCart()" style="background:var(--green);color:white;cursor:pointer;">🛒 Open Cart Drawer</button> <a href="shop.html" class="hr-chip" style="background:var(--green);color:white;text-decoration:none;display:inline-block;">🌿 Browse Shop</a><br><br>Your cart is currently **empty**. Visit our <a href="shop.html" style="color:var(--green);font-weight:600;">Dedicated Shop Page</a> to add fresh Coorg spices!`,
           time: getCurrentTime(),
           chips: [
             { label: '🌿 Explore Spices', query: 'what spices do you sell?' },
@@ -468,11 +469,11 @@
     if (text.includes('checkout') || text.includes('how to buy') || text.includes('how to order') || text.includes('place order') || text.includes('how do i buy') || text.includes('purchase')) {
       return {
         role: 'bot',
-        text: `🛍️ **How to Place an Order:**<br>1. Explore our spices and click **'Add to Cart'**.<br>2. Click your **Cart (🛒)** at the top right of the page.<br>3. Click **'Proceed to Checkout'** in the cart drawer.<br>4. Enter your shipping address and complete secure payment with UPI, Card, or Net Banking!<br><br><button type="button" class="hr-chip" onclick="window.HarvestChatbotOpenCart()" style="background:var(--green);color:white;cursor:pointer;">🛒 Open Cart</button> <a href="checkout.html" class="hr-chip" style="background:var(--green);color:white;text-decoration:none;display:inline-block;">💳 Go to Checkout</a>`,
+        text: `🛍️ **How to Place an Order:**<br>1. Head to our <a href="shop.html" style="color:var(--green);font-weight:600;">Shop Page</a> and click **'Add to Cart'** on your favorite spices.<br>2. Click your **Cart (🛒)** at the top right of any page.<br>3. Click **'Proceed to Checkout'** in the cart drawer.<br>4. Enter your shipping address, review our <a href="terms.html" target="_blank" style="color:var(--green);">Terms of Service</a> and <a href="privacy.html" target="_blank" style="color:var(--green);">Privacy Policy</a>, and pay securely with UPI, Card, or Net Banking!<br><br><a href="shop.html" class="hr-chip" style="background:var(--green);color:white;text-decoration:none;display:inline-block;">🌿 Go to Shop</a> <a href="checkout.html" class="hr-chip" style="background:var(--green);color:white;text-decoration:none;display:inline-block;">💳 Go to Checkout</a>`,
         time: getCurrentTime(),
         chips: [
           { label: '💳 Payment Methods', query: 'what payment methods do you accept?' },
-          { label: '🌿 Browse Spices', query: 'what spices do you sell?' }
+          { label: '🛡️ Refund Policy', query: 'what is your refund policy?' }
         ]
       };
     }
@@ -667,15 +668,71 @@ We skip the middlemen so you receive pure, single-origin spices bursting with fr
       };
     }
 
-    // 13. Returns / Refunds / Quality guarantee
-    if (text.includes('return') || text.includes('refund') || text.includes('replace') || text.includes('cancel') || text.includes('damage')) {
+    // 13. Returns / Refunds / Cancellation Policy
+    if (text.includes('return') || text.includes('refund') || text.includes('replace') || text.includes('cancel') || text.includes('damage') || text.includes('broken')) {
       return {
         role: 'bot',
-        text: `🛡️ **Freshness Guarantee & Returns:**<br>
-If your package arrives damaged or you are not completely delighted with the freshness, let us know within **48 hours** of delivery. We will promptly issue a free replacement or refund!`,
+        text: `🛡️ **Refund & Cancellation Policy:**<br>
+• **Food Safety & Hygiene:** Because our spices are consumable goods, packages that have been opened or unsealed cannot be returned.<br>
+• **Transit Damage / Missing Items:** If your spice parcel arrives damaged, defective, or incorrect, notify us within **48 hours** with photo verification. We will immediately ship a free replacement or issue a full refund!<br>
+• **Order Cancellation:** You can cancel orders free of charge anytime **before dispatch** from our Coorg warehouse.<br>
+• **Refund Timelines:** Approved refunds are processed back to your original payment method within **5–7 business days**.<br><br>
+<a href="refund.html" target="_blank" style="color:var(--green);font-weight:600;text-decoration:underline;">Read Full Refund Policy →</a>`,
         time: getCurrentTime(),
         chips: [
+          { label: '📜 Terms of Service', query: 'What are your terms of service?' },
           { label: '💬 Talk to Support', query: 'I want to speak with customer support' }
+        ]
+      };
+    }
+
+    // 14. Privacy Policy & Data Deletion
+    if (text.includes('privacy') || text.includes('data') || text.includes('delete my data') || text.includes('delete data') || text.includes('dpdp') || text.includes('personal information') || text.includes('cookie')) {
+      return {
+        role: 'bot',
+        text: `🔒 **Privacy & Data Protection (DPDP Compliant):**<br>
+• **Zero Data Selling:** We strictly NEVER sell, rent, or trade your personal details.<br>
+• **Information Collected:** Only name, email, phone, and delivery address strictly to fulfill and track your spice orders.<br>
+• **Cookies:** Only essential session & cart cookies are used (no intrusive 3rd-party ad trackers).<br>
+• **Data Deletion Rights:** You can request permanent deletion of your account and personal records anytime by emailing <a href="mailto:harvestroot2020@gmail.com" style="color:var(--green);text-decoration:underline;">harvestroot2020@gmail.com</a> with subject <em>"Data Deletion Request"</em>, or use our <a href="index.html#contact" style="color:var(--green);font-weight:600;text-decoration:underline;">Contact Form</a> (select <strong>Data Privacy</strong>). Processed within 7 business days.<br><br>
+<a href="privacy.html" target="_blank" style="color:var(--green);font-weight:600;text-decoration:underline;">Read Full Privacy Policy →</a>`,
+        time: getCurrentTime(),
+        chips: [
+          { label: '📜 Terms of Service', query: 'What are your terms of service?' },
+          { label: '🛡️ Refund Policy', query: 'What is your refund policy?' }
+        ]
+      };
+    }
+
+    // 15. Terms of Service & Legal
+    if (text.includes('term') || text.includes('terms') || text.includes('condition') || text.includes('tos') || text.includes('legal') || text.includes('jurisdiction')) {
+      return {
+        role: 'bot',
+        text: `📜 **Terms of Service:**<br>
+• **Transparent Pricing:** All prices are shown in Indian Rupees (₹) and are inclusive of applicable taxes.<br>
+• **Order Processing:** Orders are dispatched within 24 hours via reliable domestic logistics partners.<br>
+• **Authenticity:** All products are guaranteed 100% estate-grown pure spices packed in Coorg.<br>
+• **Governing Law:** All transactions and disputes are governed under the legal jurisdiction of courts in **Coorg / Karnataka, India**.<br><br>
+<a href="terms.html" target="_blank" style="color:var(--green);font-weight:600;text-decoration:underline;">Read Terms of Service →</a>`,
+        time: getCurrentTime(),
+        chips: [
+          { label: '🔒 Privacy Policy', query: 'What is your privacy policy?' },
+          { label: '🛡️ Refund Policy', query: 'What is your refund policy?' }
+        ]
+      };
+    }
+
+    // 16. Marketplaces (Amazon / Flipkart) vs Direct Shop
+    if (text.includes('amazon') || text.includes('flipkart') || text.includes('marketplace') || text.includes('other site') || text.includes('where else to buy')) {
+      return {
+        role: 'bot',
+        text: `🛒 **Where to Buy Harvest Root Spices:**<br>
+• **Direct Website (Best Value):** Order right here at our <a href="shop.html" style="color:var(--green);font-weight:600;">Dedicated Shop</a> for the freshest batches, free shipping above ₹500, and direct plantation support!<br>
+• **Amazon & Flipkart:** You can also find our verified brand listings on major marketplaces. Visit the <a href="shop.html#marketplaces" style="color:var(--green);font-weight:600;">Marketplace section on our Shop page</a> for official links!`,
+        time: getCurrentTime(),
+        chips: [
+          { label: '🌿 Open Shop Page', query: 'show me your spices' },
+          { label: '🚚 Shipping Policy', query: 'what is your shipping policy?' }
         ]
       };
     }
@@ -746,8 +803,18 @@ You can leave a message right here, and our support executive will review your t
 
   function formatText(str) {
     if (!str) return '';
+    // Convert markdown links [text](url) → clickable <a> tags FIRST
+    let formatted = str.replace(
+      /\[([^\]]+)\]\(((?:https?:\/\/|mailto:|\/|[\w\-./]+\.html)[^)]*)\)/g,
+      function(_, linkText, url) {
+        var isExternal = /^https?:\/\//.test(url);
+        var rel = isExternal ? ' rel="noopener noreferrer"' : '';
+        var target = isExternal ? ' target="_blank"' : '';
+        return '<a href="' + url + '"' + target + rel + ' style="color:var(--green,#2d5a3d);text-decoration:underline;font-weight:500;">' + linkText + '</a>';
+      }
+    );
     // Basic Markdown formatting: **bold**, *italic*, newlines
-    let formatted = str
+    formatted = formatted
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
       .replace(/\n/g, '<br>');
