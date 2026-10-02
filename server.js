@@ -819,7 +819,7 @@ app.post("/api/otp/verify", async (req, res) => {
 
 // ===== API ROUTES =====
 
-// 0. AI Chatbot Assistant
+// 0. AI Chatbot Assistant - Non-streaming (backwards compatible)
 app.post('/api/chat', async (req, res) => {
     const { message, history } = req.body;
     if (!message || typeof message !== 'string') {

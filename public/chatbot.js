@@ -14,6 +14,9 @@
   let isOpen = false;
   let isSending = false;
   let chatHistory = [];
+  let productCache = null; // Live product data from API
+  let productCacheTime = 0;
+  const PRODUCT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   // Default initial quick chips
   const INITIAL_CHIPS = [
@@ -24,6 +27,60 @@
     { label: '📦 Track My Order', query: 'How do I track my order status?' },
     { label: '📩 Contact Support', query: 'I want to contact human support' }
   ];
+
+  // ===== LIVE PRODUCT DATA =====
+  async function fetchLiveProducts() {
+    const now = Date.now();
+    if (productCache && (now - productCacheTime) < PRODUCT_CACHE_TTL) {
+      return productCache;
+    }
+    try {
+      const res = await fetch('/api/products');
+      if (res.ok) {
+        const data = await res.json();
+        productCache = data.products || [];
+        productCacheTime = now;
+        return productCache;
+      }
+    } catch (e) {
+      console.warn('Failed to fetch live products, using fallback:', e.message);
+    }
+    // Fallback to seeded data matching db.js
+    return [
+      { id: 1, name: 'Black Pepper', origin: 'Coorg Estate', price: 169, unit: '100g', stock: 80, badge: 'Bestseller' },
+      { id: 2, name: 'Cloves', origin: 'Coorg Hills', price: 420, unit: '100g', stock: 45, badge: 'Premium' },
+      { id: 3, name: 'Green Cardamom', origin: 'Western Ghats', price: 580, unit: '100g', stock: 15, badge: 'Popular' },
+      { id: 4, name: 'Cinnamon Sticks', origin: 'Coorg Plantation', price: 310, unit: '100g', stock: 0, badge: '' }
+    ];
+  }
+
+  function findProduct(query) {
+    const text = query.toLowerCase();
+    // Returns matching product or null
+    if (text.includes('black pepper') || text.includes('peppercorn')) return productCache?.find(p => p.name.toLowerCase().includes('pepper')) || null;
+    if (text.includes('cardamom') || text.includes('elaichi')) return productCache?.find(p => p.name.toLowerCase().includes('cardamom')) || null;
+    if (text.includes('clove') || text.includes('laung')) return productCache?.find(p => p.name.toLowerCase().includes('clove')) || null;
+    if (text.includes('cinnamon') || text.includes('dalchini')) return productCache?.find(p => p.name.toLowerCase().includes('cinnamon')) || null;
+    return null;
+  }
+
+  function formatProductCard(product) {
+    if (!product) return '';
+    const stockText = product.stock > 0 ? (product.stock <= 10 ? `⚠️ Only ${product.stock} left` : '✓ In Stock') : '❌ Sold Out';
+    const badge = product.badge ? `<span style="background:var(--gold-light,#daa84e);color:#1a1510;padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:600;margin-left:8px;">${product.badge}</span>` : '';
+    return `<div class="hr-product-card" style="background:#fff;border:1px solid var(--sand,#e4d8c9);border-radius:10px;padding:12px;margin:8px 0;display:flex;gap:12px;align-items:flex-start;">
+      <div style="flex:1;min-width:0;">
+        <strong style="color:var(--green,#295337);">${product.name}</strong> ${badge}<br>
+        <span style="color:var(--text-light,#6a6058);font-size:0.8rem;">${product.origin}</span><br>
+        <span style="font-size:0.85rem;">${stockText}</span>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-size:1.1rem;font-weight:700;color:var(--green,#295337);">₹${product.price}</div>
+        <div style="font-size:0.75rem;color:var(--text-light,#6a6058);">/ ${product.unit}</div>
+        <button type="button" class="hr-chip" onclick="window.HarvestChatbotAddToCart(${product.id})" style="margin-top:8px;background:var(--green,#295337);color:white;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.75rem;font-weight:600;">Add to Cart</button>
+      </div>
+    </div>`;
+  }
 
   // ===== INJECT DOM =====
   function injectChatbotDOM() {
@@ -255,8 +312,8 @@
     const body = document.getElementById('hr-chat-body');
     const typingEl = document.createElement('div');
     typingEl.id = 'hr-typing-indicator';
-    typingEl.className = 'hr-typing-bubble';
-    typingEl.innerHTML = `<span></span><span></span><span></span>`;
+    typingEl.className = 'hr-typing-indicator';
+    typingEl.innerHTML = `<span class="hr-typing-dot"></span><span class="hr-typing-dot"></span><span class="hr-typing-dot"></span>`;
     body.appendChild(typingEl);
     scrollToBottom();
   }
@@ -432,8 +489,12 @@
     const text = q.toLowerCase();
     const liveCart = getLiveCart();
 
-    // 1. Live Cart Queries ("how do i see my cart", "how many products do i have in my cart", "where is cart")
-    if (text.includes('cart') || text.includes('basket') || text.includes('bag')) {
+    // Helper: check if any keyword exists in text
+    const hasAny = (keywords) => keywords.some(k => text.includes(k));
+    const hasAll = (keywords) => keywords.every(k => text.includes(k));
+
+    // 1. Live Cart Queries
+    if (hasAny(['cart', 'basket', 'bag', 'trolley', 'shopping bag'])) {
       const totalItems = liveCart.reduce((s, i) => s + (parseInt(i.qty) || 1), 0);
       const totalPrice = liveCart.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.qty) || 1), 0);
 
@@ -466,7 +527,7 @@
     }
 
     // 2. Checkout & How to Order
-    if (text.includes('checkout') || text.includes('how to buy') || text.includes('how to order') || text.includes('place order') || text.includes('how do i buy') || text.includes('purchase')) {
+    if (hasAny(['checkout', 'check out', 'how to buy', 'how to order', 'place order', 'how do i buy', 'purchase', 'buy now', 'order now', 'complete order', 'proceed to pay', 'payment', 'pay now', 'finish order', 'confirm order', 'place an order', 'make order', 'submit order', 'finalize'])) {
       return {
         role: 'bot',
         text: `🛍️ **How to Place an Order:**<br>1. Head to our <a href="shop.html" style="color:var(--green);font-weight:600;">Shop Page</a> and click **'Add to Cart'** on your favorite spices.<br>2. Click your **Cart (🛒)** at the top right of any page.<br>3. Click **'Proceed to Checkout'** in the cart drawer.<br>4. Enter your shipping address, review our <a href="terms.html" target="_blank" style="color:var(--green);">Terms of Service</a> and <a href="privacy.html" target="_blank" style="color:var(--green);">Privacy Policy</a>, and pay securely with UPI, Card, or Net Banking!<br><br><a href="shop.html" class="hr-chip" style="background:var(--green);color:white;text-decoration:none;display:inline-block;">🌿 Go to Shop</a> <a href="checkout.html" class="hr-chip" style="background:var(--green);color:white;text-decoration:none;display:inline-block;">💳 Go to Checkout</a>`,
@@ -479,7 +540,7 @@
     }
 
     // 3. Discounts, Offers & Coupons
-    if (text.includes('discount') || text.includes('coupon') || text.includes('promo') || text.includes('offer') || text.includes('sale') || text.includes('deal') || text.includes('cheap')) {
+    if (hasAny(['discount', 'coupon', 'promo', 'offer', 'sale', 'deal', 'cheap', 'coupons', 'promo code', 'promocode', 'voucher', 'vouchers', 'code', 'discount code', 'special', 'savings', 'save money', 'cheaper', 'best price', 'lowest price', 'affordable', 'budget', 'offer code', 'gift code', 'referral'])) {
       return {
         role: 'bot',
         text: `🎁 **Current Offers & Savings at Harvest Root:**<br>• **FREE Delivery:** On all orders over **₹500** across India!<br>• **Estate-Direct Pricing:** Because our spices are handpicked and packed directly on our Coorg plantation, you get top Tellicherry-grade quality without distributor markups.`,
@@ -492,7 +553,7 @@
     }
 
     // 4. Chai & Cooking Recipes
-    if (text.includes('chai') || text.includes('tea')) {
+    if (hasAny(['chai', 'tea', 'masala chai', 'spiced tea', 'milk tea', 'kadak chai', 'adrak chai', 'ginger tea', 'elaichi chai', 'cardamom tea'])) {
       return {
         role: 'bot',
         text: `☕ **Authentic Coorg Masala Chai:**<br>1. Lightly crush **2 Green Cardamoms**, **2 Whole Cloves**, and a piece of **Cinnamon Stick**.<br>2. Simmer with milk and water, then add tea leaves.<br>3. Finish with a pinch of crushed **Black Pepper** for warmth and immunity!`,
@@ -504,7 +565,7 @@
       };
     }
 
-    if (text.includes('biryani') || text.includes('curry') || text.includes('cooking')) {
+    if (hasAny(['biryani', 'curry', 'cooking', 'recipe', 'cook', 'masala', 'gravy', 'sabzi', 'dal', 'lentils', 'rice', 'pulao', 'khichdi', 'stew', 'soup', 'marinade', 'season', 'spice blend', 'garam masala', 'tempering', 'tadka', 'bloom spices', 'indian cooking', 'south indian', 'north indian'])) {
       return {
         role: 'bot',
         text: `🍚 **Whole Spices for Biryani & Curries:**<br>Our whole **Green Cardamom**, **Whole Cloves**, and **Black Pepper** release intense essential oils when tempered in hot ghee, forming the quintessential royal base for Dum Biryani and rich gravies!`,
@@ -516,7 +577,7 @@
     }
 
     // 5. Storage & Shelf Life
-    if (text.includes('store') || text.includes('storage') || text.includes('shelf life') || text.includes('expiry') || text.includes('expire') || text.includes('how long')) {
+    if (hasAny(['store', 'storage', 'shelf life', 'expiry', 'expire', 'how long', 'keep', 'preserve', 'fresh', 'freshness', 'longevity', 'last', 'duration', 'best before', 'use by', 'seal', 'container', 'jar', 'pantry', 'cupboard', 'refrigerate', 'fridge', 'freeze', 'airtight'])) {
       return {
         role: 'bot',
         text: `🍃 **Spice Storage & Shelf Life:**<br>• Store whole spices in an airtight container in a cool, dry pantry away from sunlight and moisture.<br>• Properly stored, our sun-dried whole spices retain maximum potency and aroma for **12–18 months**!`,
@@ -528,7 +589,7 @@
     }
 
     // 6. Account & Login
-    if (text.includes('sign in') || text.includes('login') || text.includes('account') || text.includes('register') || text.includes('password') || text.includes('profile')) {
+    if (hasAny(['sign in', 'signin', 'login', 'log in', 'account', 'register', 'registration', 'signup', 'sign up', 'password', 'profile', 'my account', 'user', 'credentials', 'forgot password', 'reset password', 'change password', 'email', 'username', 'logout', 'sign out', 'log out', 'signed in', 'logged in', 'access'])) {
       return {
         role: 'bot',
         text: `👤 **Account & Sign In:**<br>You can sign in by clicking **'Sign In'** in the top navbar. We support one-click **Google Sign In** as well as email/password. You can also place orders as a guest anytime!`,
@@ -556,7 +617,7 @@
     }
 
     // 8. Specific Spices
-    if (text.includes('black pepper') || text.includes('peppercorn')) {
+    if (hasAny(['black pepper', 'peppercorn', 'pepper', 'kali mirch', 'tellicherry', 'malabar pepper'])) {
       return {
         role: 'bot',
         text: `🌿 **Tellicherry Black Pepper (Coorg Estate):**<br>• **Price:** ₹200 / 100g<br>• **Profile:** Bold, sun-dried berries with high piperine content and robust warmth.<br>• **Health Benefits:** Supports digestion, nutrient absorption, and immunity.`,
@@ -568,7 +629,7 @@
       };
     }
 
-    if (text.includes('cardamom') || text.includes('elaichi')) {
+    if (hasAny(['cardamom', 'elaichi', 'elachi', 'green cardamom', 'choti elaichi', 'true cardamom'])) {
       return {
         role: 'bot',
         text: `🌿 **Green Cardamom (Western Ghats):**<br>• **Price:** ₹580 / 100g<br>• **Profile:** Plump green pods with sweet floral eucalyptus aroma.<br>• **Best for:** Chai, biryani, desserts, and natural breath freshening.`,
